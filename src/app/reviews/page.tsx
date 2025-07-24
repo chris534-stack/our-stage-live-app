@@ -2,7 +2,7 @@
 import { getAllReviews, getAllEvents } from '@/lib/data';
 import type { Review, Event } from '@/lib/types';
 import { BecomeReviewerCTA } from '@/components/reviews/BecomeReviewerCTA';
-import { ReviewPreviewCard } from '@/components/reviews/ReviewPreviewCard';
+import { ReviewCarousel } from '@/components/reviews/ReviewCarousel';
 import { toTitleCase } from '@/lib/utils';
 import { startOfToday } from 'date-fns';
 
@@ -68,8 +68,61 @@ function createMockReview(event: Event): Review {
         ticketInfo: "Paid $35 for a seat in the mezzanine, Row E. The view was excellent for the price.",
         valueConsiderationText: "For the price of a movie ticket and popcorn, you get a live experience that will stick with you for weeks. The production value was outstanding and felt like a bargain.",
         timeWellSpentText: "Absolutely. The show was engaging from start to finish. I'd recommend it to anyone looking for a powerful night of theatre.",
+        disclosureText: "I attended this performance as a regular audience member and purchased my own ticket.",
         likes: 12,
         dislikes: 1,
+        votedBy: [],
+    };
+}
+
+// Helper function to create second mock review
+function createSecondMockReview(event: Event): Review {
+     const performanceDate = event.occurrences?.[1]?.date || event.occurrences?.[0]?.date || new Date().toISOString().split('T')[0];
+     return {
+        id: 'mock-review-2',
+        showId: event.id,
+        showTitle: event.title,
+        performanceDate: performanceDate,
+        reviewerId: 'mock-user-id-2',
+        reviewerName: 'Alex Theatre',
+        createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+        overallExperience: "Good & Enjoyable",
+        specialMomentsText: "The choreography was well-executed and the ensemble cast worked beautifully together. Some technical issues with the sound system in the first act, but overall a solid production that showcased local talent effectively.",
+        recommendations: ["Family Friendly", "Musical", "Community"],
+        showHeartText: "A heartwarming story that resonates with our community. The local references and humor made it feel very Eugene.",
+        communityImpactText: "Great to see our local theatre scene producing original work. This kind of production brings people together.",
+        ticketInfo: "Paid $28 for orchestra seating. Good value for a local production.",
+        valueConsiderationText: "Reasonable pricing for the quality of production. Supporting local theatre is always worthwhile.",
+        timeWellSpentText: "Yes, an enjoyable evening out. Would recommend to friends looking for local entertainment.",
+        disclosureText: "I purchased my ticket through the box office and have no affiliation with the production.",
+        likes: 8,
+        dislikes: 0,
+        votedBy: [],
+    };
+}
+
+// Helper function to create third mock review
+function createThirdMockReview(event: Event): Review {
+     const performanceDate = event.occurrences?.[2]?.date || event.occurrences?.[0]?.date || new Date().toISOString().split('T')[0];
+     return {
+        id: 'mock-review-3',
+        showId: event.id,
+        showTitle: event.title,
+        performanceDate: performanceDate,
+        reviewerId: 'mock-user-id-3',
+        reviewerName: 'Jordan Playgoer',
+        createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+        overallExperience: "Mixed Feelings",
+        specialMomentsText: "Some brilliant moments, particularly in the second half. The lead actor really found their stride after intermission. However, pacing issues in the first act made it feel longer than necessary.",
+        recommendations: ["Dramatic", "Thought-Provoking"],
+        showHeartText: "An ambitious piece that doesn't quite hit all its marks but shows real potential. The themes are relevant and important.",
+        communityImpactText: "Appreciate the effort to tackle difficult subjects. Not every show needs to be perfect to be meaningful.",
+        ticketInfo: "Student discount ticket for $20. Fair price point for students.",
+        valueConsiderationText: "At the student price, definitely worth it. Full price might be steep given some of the production issues.",
+        timeWellSpentText: "Worth seeing for the second act alone. The ending really brings everything together.",
+        disclosureText: "Student ticket holder, no other connection to the production.",
+        likes: 5,
+        dislikes: 2,
         votedBy: [],
     };
 }
@@ -97,7 +150,7 @@ export default async function ReviewsPage() {
     });
 
     return (
-        <div className="container mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div className="w-full py-8 px-2 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
                 <h1 className="text-4xl md:text-5xl font-bold font-headline text-primary mb-3">Community Reviews</h1>
                 <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
@@ -115,14 +168,10 @@ export default async function ReviewsPage() {
                         const group = groupedReviews[showId];
                         return (
                             <section key={showId}>
-                                <h2 className="text-3xl font-bold font-headline text-primary mb-6">
+                                <h2 className="text-2xl md:text-3xl font-bold font-headline text-primary mb-4 text-left">
                                     Reviews for <span className="text-accent">{group.showTitle}</span>
                                 </h2>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {group.reviews.map(review => (
-                                        <ReviewPreviewCard key={review.id} review={review} />
-                                    ))}
-                                </div>
+                                <ReviewCarousel reviews={group.reviews} />
                             </section>
                         )
                     })
