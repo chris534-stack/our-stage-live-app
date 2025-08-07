@@ -30,6 +30,9 @@ pnpm-debug.log*
 .env*.local
 .env
 
+# Firebase App Hosting config with sensitive data
+apphosting.yaml
+
 # vercel
 .vercel
 
