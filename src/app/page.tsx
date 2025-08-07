@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button';
 import { getFeaturedEventsFirestore, getAllVenues } from '@/lib/data';
 import type { Event, Venue } from '@/lib/types';
 import { ExpandableEventTile } from '@/components/home/ExpandableEventTile';
+import { CommunitySpotlightSection } from '@/components/home/CommunitySpotlightSection';
+import { CommunityExplorationSection } from '@/components/community/CommunityExplorationSection';
 
 type EventWithVenue = Event & { venue?: Venue };
 
@@ -48,16 +50,36 @@ export default async function Home() {
 
       <section className="py-8 md:py-12 bg-background">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8 md:mb-12">
             <h2 className="text-3xl md:text-4xl font-bold font-headline text-primary">Featured This Month</h2>
           </div>
-          <div className="flex flex-wrap justify-center gap-8">
+          
+          {/* Mobile: Horizontal scroll */}
+          <div className="md:hidden">
+            <div className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide">
+              {featuredEvents.map(event => (
+                <div key={event.id} className="flex-shrink-0">
+                  <ExpandableEventTile event={event} />
+                </div>
+              ))}
+            </div>
+            <div className="text-center mt-4">
+              <p className="text-sm text-muted-foreground">Swipe to see more events</p>
+            </div>
+          </div>
+          
+          {/* Desktop: Current layout */}
+          <div className="hidden md:flex flex-wrap justify-center gap-8">
             {featuredEvents.map(event => (
               <ExpandableEventTile key={event.id} event={event} />
             ))}
           </div>
         </div>
       </section>
+
+      <CommunitySpotlightSection />
+      
+      <CommunityExplorationSection />
     </div>
   );
 }

@@ -32,7 +32,7 @@ export function MobileNav() {
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-primary border-t border-border/20 shadow-t-lg z-50">
-      <div className="container mx-auto flex justify-between py-2">
+      <div className="container mx-auto flex justify-around py-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;

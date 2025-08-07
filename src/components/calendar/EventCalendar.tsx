@@ -37,6 +37,7 @@ import Link from 'next/link';
 import { ReviewList } from '@/components/reviews/ReviewList';
 import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/badge';
+import { useSwipeable } from 'react-swipeable';
 
 const AddEventButton = dynamic(
     () => import('@/components/admin/AddEventButton').then(mod => mod.AddEventButton),
@@ -284,6 +285,23 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
     setCurrentMonth(month);
   }
 
+  // Swipe gesture handlers for month navigation
+  const monthSwipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (currentMonth) {
+        handleMonthChange(addMonths(currentMonth, 1));
+      }
+    },
+    onSwipedRight: () => {
+      if (currentMonth) {
+        handleMonthChange(subMonths(currentMonth, 1));
+      }
+    },
+    trackMouse: false, // Only track touch events on mobile
+    preventScrollOnSwipe: true,
+    trackTouch: true,
+  });
+
   if (!isClient || !currentMonth) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-full lg:max-w-none">
@@ -298,7 +316,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
   }
 
   const DesktopCalendar = () => (
-    <Card className="h-full flex flex-col min-h-[720px]">
+    <Card className="h-full flex flex-col min-h-[720px]" {...monthSwipeHandlers}>
       <CardHeader className="flex flex-row items-center justify-between py-4">
         <CardTitle className="font-headline text-2xl">{format(currentMonth, 'MMMM yyyy')}</CardTitle>
         <div className="flex items-center gap-2">
@@ -362,7 +380,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
   );
 
   const MobileCalendar = () => {
-    function CustomDayContent(props: DayContentProps) {
+    const CustomDayContent = (props: DayContentProps) => {
         const { date } = props;
         const dateKey = format(date, 'yyyy-MM-dd');
         const dayEvents = eventsByDate.get(dateKey) || [];
@@ -389,11 +407,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
       }
     
     return (
-      <div 
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div {...monthSwipeHandlers}>
         <Calendar
           mode="single"
           selected={selectedDate}
@@ -418,7 +432,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
       <div className="lg:col-span-2">
         {isMobile ? <MobileCalendar /> : <DesktopCalendar />}
       </div>
-      <div className="lg:col-span-1 max-h-[80vh] flex flex-col">
+      <div className="lg:col-span-1">
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 className="text-xl md:text-2xl font-headline">
             {selectedDate ? format(selectedDate, 'MMMM d') : 'Events'}
@@ -482,7 +496,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
             </Popover>
           </div>
         </div>
-        <div className="space-y-4 overflow-y-auto pr-2 flex-grow">
+        <div className="space-y-4">
           {selectedDayEvents.length > 0 ? (
             selectedDayEvents.map(event => {
               const isSelected = selectedEventId === event.id;

@@ -20,13 +20,7 @@ export default async function AdminPage() {
 
   return (
     <AdminAuthGuard>
-      <div className="container mx-auto py-8 px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold font-headline text-primary">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-2">Manage events and scrape new listings.</p>
-        </div>
-        <AdminDashboard initialEvents={allEventsWithVenues} venues={allVenues} />
-      </div>
+      <AdminDashboard initialEvents={allEventsWithVenues} venues={allVenues} />
     </AdminAuthGuard>
   );
 }

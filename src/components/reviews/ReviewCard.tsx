@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { ThumbsUp, ThumbsDown } from 'lucide-react';
+import { ThumbsUp, ThumbsDown, Type, Minus, Plus } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { voteOnReviewAction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -14,12 +14,80 @@ import { cn } from '@/lib/utils';
 import SignInPromptModal from '@/components/SignInPromptModal';
 import Link from 'next/link';
 
-function ReviewSection({ title, content }: { title: string, content: React.ReactNode }) {
+type FontSize = 'small' | 'medium' | 'large';
+
+interface ReviewSectionProps {
+    title: string;
+    content: React.ReactNode;
+    fontSize: FontSize;
+}
+
+function ReviewSection({ title, content, fontSize }: ReviewSectionProps) {
     if (!content) return null;
+    
+    const titleSizeClasses = {
+        small: 'text-sm',
+        medium: 'text-base',
+        large: 'text-lg'
+    };
+    
+    const contentSizeClasses = {
+        small: 'text-sm',
+        medium: 'text-base',
+        large: 'text-lg'
+    };
+    
     return (
-        <div>
-            <h4 className="font-semibold text-sm text-foreground">{title}</h4>
-            <p className="text-muted-foreground text-sm mt-1 whitespace-pre-wrap">{content}</p>
+        <div className="space-y-2">
+            <h4 className={cn("font-semibold text-foreground", titleSizeClasses[fontSize])}>
+                {title}
+            </h4>
+            <p className={cn(
+                "text-muted-foreground mt-2 whitespace-pre-wrap leading-relaxed",
+                contentSizeClasses[fontSize]
+            )}>
+                {content}
+            </p>
+        </div>
+    )
+}
+
+interface FontSizeControlsProps {
+    fontSize: FontSize;
+    onFontSizeChange: (size: FontSize) => void;
+}
+
+function FontSizeControls({ fontSize, onFontSizeChange }: FontSizeControlsProps) {
+    return (
+        <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+            <Type className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground font-medium">Text Size:</span>
+            <div className="flex items-center gap-1">
+                <Button
+                    variant={fontSize === 'small' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onFontSizeChange('small')}
+                >
+                    <Minus className="h-3 w-3" />
+                </Button>
+                <Button
+                    variant={fontSize === 'medium' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onFontSizeChange('medium')}
+                >
+                    A
+                </Button>
+                <Button
+                    variant={fontSize === 'large' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => onFontSizeChange('large')}
+                >
+                    <Plus className="h-3 w-3" />
+                </Button>
+            </div>
         </div>
     )
 }
@@ -33,6 +101,7 @@ export function ReviewCard({ review, hideHeader = false }: { review: Review, hid
     const [localDislikes, setLocalDislikes] = useState(review.dislikes || 0);
     const [voted, setVoted] = useState<'like' | 'dislike' | null>(null);
     const [showSignInModal, setShowSignInModal] = useState(false);
+    const [fontSize, setFontSize] = useState<FontSize>('medium');
 
     const handleVote = (voteType: 'like' | 'dislike') => {
         if (!user) {
@@ -83,27 +152,62 @@ export function ReviewCard({ review, hideHeader = false }: { review: Review, hid
                         </div>
                     </CardHeader>
                 )}
-                <CardContent className={cn("space-y-4", hideHeader && "pt-6")}>
+                <CardContent className={cn("space-y-6", hideHeader && "pt-6")}>
+                    {/* Font Size Controls */}
+                    <FontSizeControls fontSize={fontSize} onFontSizeChange={setFontSize} />
+                    
+                    {/* Recommendations */}
                     <div className="flex flex-wrap gap-2">
                         {review.recommendations?.map(rec => <Badge key={rec} variant="outline">{rec}</Badge>)}
                     </div>
 
-                    <ReviewSection title="What made this performance special?" content={review.specialMomentsText} />
-                    <ReviewSection title="The Heart of the Show" content={review.showHeartText} />
-                    <ReviewSection title="Is this show important for Eugene right now?" content={review.communityImpactText} />
-                    
-                    <Separator />
+                    {/* Review Content */}
+                    <div className="space-y-6">
+                        <ReviewSection 
+                            title="What made this performance special?" 
+                            content={review.specialMomentsText} 
+                            fontSize={fontSize}
+                        />
+                        <ReviewSection 
+                            title="The Heart of the Show" 
+                            content={review.showHeartText} 
+                            fontSize={fontSize}
+                        />
+                        <ReviewSection 
+                            title="Is this show important for Eugene right now?" 
+                            content={review.communityImpactText} 
+                            fontSize={fontSize}
+                        />
+                        
+                        <Separator className="my-6" />
 
-                    <ReviewSection title="Ticket & Seat Info" content={review.ticketInfo} />
-                    <ReviewSection title="Production Value & Admission" content={review.valueConsiderationText} />
-                    <ReviewSection title="A Rewarding Evening?" content={review.timeWellSpentText} />
-                    
-                    {review.disclosureText && (
-                        <>
-                            <Separator />
-                            <ReviewSection title="Transparency Disclosure" content={review.disclosureText} />
-                        </>
-                    )}
+                        <ReviewSection 
+                            title="Ticket & Seat Info" 
+                            content={review.ticketInfo} 
+                            fontSize={fontSize}
+                        />
+                        <ReviewSection 
+                            title="Production Value & Admission" 
+                            content={review.valueConsiderationText} 
+                            fontSize={fontSize}
+                        />
+                        <ReviewSection 
+                            title="A Rewarding Evening?" 
+                            content={review.timeWellSpentText} 
+                            fontSize={fontSize}
+                        />
+                        
+                        {review.disclosureText && (
+                            <>
+                                <Separator className="my-6" />
+                                <ReviewSection 
+                                    title="Transparency Disclosure" 
+                                    content={review.disclosureText} 
+                                    fontSize={fontSize}
+                                />
+                            </>
+                        )}
+                    </div>
 
                 </CardContent>
                 <CardFooter className="flex justify-end items-center gap-4">

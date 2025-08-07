@@ -4,9 +4,9 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ReviewerRequestForm } from '@/components/reviews/ReviewerRequestForm';
+import { WriteReviewFlow } from '@/components/reviews/WriteReviewFlow';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { PenTool } from 'lucide-react';
-import Link from 'next/link';
 
 export function BecomeReviewerCTA() {
     const { isReviewer } = useAuth();
@@ -28,12 +28,14 @@ export function BecomeReviewerCTA() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="pt-6 md:pt-0 flex items-center justify-center">
-                        <Button asChild size="lg" className="w-full max-w-xs">
-                            <Link href="/calendar">
-                                <PenTool className="mr-2 h-4 w-4" />
-                                Write a Review
-                            </Link>
-                        </Button>
+                        <WriteReviewFlow 
+                            trigger={
+                                <Button size="lg" className="w-full max-w-xs">
+                                    <PenTool className="mr-2 h-4 w-4" />
+                                    Write a Review
+                                </Button>
+                            }
+                        />
                     </CardContent>
                 </div>
             </Card>

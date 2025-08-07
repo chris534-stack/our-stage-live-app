@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { uploadProfilePhotoAction } from '@/lib/actions';
+import { resilientUpload, checkNetworkConnectivity, estimateNetworkQuality } from '@/lib/upload-resilience';
 import { Loader2, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -42,27 +43,121 @@ export function PhotoUploader({ userId, onUploadComplete, isGridItem = false, li
     const files = event.target.files;
     if (files && files.length > 0) {
         const file = files[0];
-        const formData = new FormData();
-        formData.append('photo', file);
-        formData.append('userId', userId);
-
-        startTransition(async () => {
-            const result = await uploadProfilePhotoAction(formData);
-            if (result.success) {
-                toast({
-                    title: 'Upload successful!',
-                    description: 'Your photo has been added to the gallery.',
-                });
-                onUploadComplete();
-                form.reset(); // Reset form after successful upload
-            } else {
+        
+        // Validate file before upload to prevent crashes
+        try {
+            // Check file type
+            if (!file.type.startsWith('image/')) {
                 toast({
                     variant: 'destructive',
-                    title: 'Upload failed',
-                    description: result.message,
+                    title: 'Invalid file type',
+                    description: 'Please select an image file.',
                 });
+                return;
             }
-        });
+            
+            // Check file size (10MB limit)
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                toast({
+                    variant: 'destructive',
+                    title: 'File too large',
+                    description: 'Please select a file smaller than 10MB.',
+                });
+                return;
+            }
+            
+            // Check for corrupted files
+            if (file.size === 0) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Invalid file',
+                    description: 'The selected file appears to be corrupted.',
+                });
+                return;
+            }
+
+            startTransition(async () => {
+                try {
+                    // Check network connectivity first
+                    const isOnline = await checkNetworkConnectivity();
+                    if (!isOnline) {
+                        toast({
+                            title: 'No internet connection',
+                            description: 'Please check your internet connection and try again.',
+                            variant: 'destructive'
+                        });
+                        return;
+                    }
+
+                    // Check network quality and warn user if poor
+                    const networkQuality = await estimateNetworkQuality();
+                    if (networkQuality === 'poor') {
+                        toast({
+                            title: 'Slow connection detected',
+                            description: 'Upload may take longer due to poor network conditions.',
+                        });
+                    }
+
+                    // Use resilient upload with retry mechanism
+                    const result = await resilientUpload(
+                        file,
+                        uploadProfilePhotoAction,
+                        userId,
+                        {
+                            maxRetries: 3,
+                            retryDelay: 2000,
+                            timeoutMs: 90000, // 1.5 minutes
+                            validateIntegrity: true
+                        }
+                    );
+
+                    if (result.success) {
+                        const retryInfo = result.retryCount && result.retryCount > 1 
+                            ? ` (succeeded after ${result.retryCount} attempts)` 
+                            : '';
+                        
+                        toast({
+                            title: 'Photo uploaded successfully!' + retryInfo,
+                            description: `Upload completed in ${Math.round((result.duration || 0) / 1000)}s.`
+                        });
+                        onUploadComplete();
+                        form.reset();
+                    } else {
+                        console.error('Resilient upload failed:', {
+                            error: result.error,
+                            retryCount: result.retryCount,
+                            duration: result.duration
+                        });
+                        
+                        const retryInfo = result.retryCount && result.retryCount > 1 
+                            ? ` (failed after ${result.retryCount} attempts)` 
+                            : '';
+                        
+                        toast({
+                            title: 'Upload failed' + retryInfo,
+                            description: result.error || 'Failed to upload photo. Please try again.',
+                            variant: 'destructive'
+                        });
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+                    toast({
+                        title: 'Upload error',
+                        description: errorMessage,
+                        variant: 'destructive'
+                    });
+                }
+            });
+        } catch (error) {
+            console.error('File validation error:', error);
+            toast({
+                variant: 'destructive',
+                title: 'File validation failed',
+                description: 'Could not process the selected file. Please try again.',
+            });
+        }
     }
   };
 

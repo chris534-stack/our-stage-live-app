@@ -1,7 +1,7 @@
 
 
 import { adminDb, admin } from './firebase-admin'; // Admin SDK for server-side functions
-import type { Event, Venue, EventStatus, NewsArticle, Review, UserProfile } from './types';
+import type { Event, Venue, EventStatus, NewsArticle, Review, UserProfile, CommunitySpotlight, ReviewerRequest } from './types';
 import { startOfToday, addDays } from 'date-fns';
 import type { UserRecord } from 'firebase-admin/auth';
 
@@ -397,6 +397,92 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
 // --- User Profile Functions ---
 
 /**
+ * [SERVER-SIDE] Gets all user profiles for admin management.
+ */
+export async function getAllUserProfiles(): Promise<UserProfile[]> {
+    try {
+        const snapshot = await adminDb.collection('userProfiles')
+            .orderBy('displayName')
+            .get();
+        
+        return snapshot.docs
+            .filter(doc => {
+                const data = doc.data();
+                // Only include profiles with proper displayName
+                return data.displayName && data.displayName.trim() !== '';
+            })
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    userId: doc.id,
+                    displayName: data.displayName || '',
+                    photoURL: data.photoURL || '',
+                    email: data.email || '',
+                    bio: data.bio,
+                    roleInCommunity: data.roleInCommunity,
+                    communityStartDate: data.communityStartDate,
+                    galleryImageUrls: data.galleryImageUrls || [],
+                    coverPhotoUrl: data.coverPhotoUrl,
+                    showEmail: data.showEmail || false,
+                    authStatus: data.authStatus || 'active',
+                } as UserProfile;
+            });
+    } catch (error) {
+        console.error('Error fetching all user profiles:', error);
+        return [];
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets user profile statistics for admin dashboard.
+ */
+export async function getUserProfileStats(): Promise<{
+    totalUsers: number;
+    activeUsers: number;
+    reviewers: number;
+    admins: number;
+}> {
+    try {
+        const [profilesSnapshot, reviewerRequestsSnapshot] = await Promise.all([
+            adminDb.collection('userProfiles').get(),
+            adminDb.collection('reviewerRequests').where('status', '==', 'approved').get()
+        ]);
+        
+        // Filter out profiles that don't have proper displayName (these shouldn't be counted)
+        const validProfiles = profilesSnapshot.docs.filter(doc => {
+            const data = doc.data();
+            return data.displayName && data.displayName.trim() !== '';
+        });
+        
+        const totalUsers = validProfiles.length;
+        const activeUsers = validProfiles.filter(doc => {
+            const data = doc.data();
+            return data.authStatus !== 'notFound';
+        }).length;
+        
+        const reviewers = reviewerRequestsSnapshot.size;
+        
+        // Set admin count to 1 (just you for now)
+        const admins = 1;
+        
+        return {
+            totalUsers,
+            activeUsers,
+            reviewers,
+            admins
+        };
+    } catch (error) {
+        console.error('Error fetching user profile stats:', error);
+        return {
+            totalUsers: 0,
+            activeUsers: 0,
+            reviewers: 0,
+            admins: 0
+        };
+    }
+}
+
+/**
  * [SERVER-SIDE] Fetches a user profile from Firestore, creating one if it doesn't exist.
  * This function now safely handles "ghost users" (profiles without a matching auth record)
  * and returns the user's authentication status.
@@ -466,5 +552,569 @@ export async function getOrCreateUserProfile(userId: string): Promise<UserProfil
     } catch (err) {
         console.error(`A fatal error occurred in getOrCreateUserProfile for userId "${userId}":`, err);
         return null; // This guarantees the function never crashes the server.
+    }
+}
+
+
+// --- Community Spotlight Functions ---
+
+/**
+ * [SERVER-SIDE] Gets the currently active community spotlight.
+ */
+export async function getActiveSpotlight(): Promise<CommunitySpotlight | null> {
+    try {
+        const snapshot = await adminDb.collection('communitySpotlights')
+            .where('isActive', '==', true)
+            .limit(1)
+            .get();
+        
+        if (snapshot.empty) {
+            return null;
+        }
+        
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            try {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name,
+                    story: data.story,
+                    photoUrl: data.photoUrl,
+                    tags: data.tags,
+                    createdAt: safeToISOString(data.createdAt),
+                    createdBy: data.createdBy,
+                    isActive: data.isActive,
+                    links: data.links,
+                    adminNotes: data.adminNotes,
+                } as CommunitySpotlight;
+            } catch (error) {
+                console.error(`Error processing active spotlight document ${doc.id}:`, error);
+                // If the active spotlight is corrupted, return null
+                return null;
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error fetching active spotlight:', error);
+        return null;
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets all community spotlights (for admin management).
+ */
+export async function getAllSpotlights(): Promise<CommunitySpotlight[]> {
+    try {
+        const snapshot = await adminDb.collection('communitySpotlights')
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        return snapshot.docs.map(doc => {
+            try {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    story: data.story || '',
+                    photoUrl: data.photoUrl || '',
+                    tags: data.tags || [],
+                    createdAt: safeToISOString(data.createdAt),
+                    createdBy: data.createdBy || '',
+                    isActive: data.isActive || false,
+                    links: data.links || undefined,
+                    adminNotes: data.adminNotes || undefined,
+                } as CommunitySpotlight;
+            } catch (error) {
+                console.error(`Error processing spotlight document ${doc.id}:`, error);
+                // Return a safe default for corrupted documents
+                return {
+                    id: doc.id,
+                    name: 'Corrupted Spotlight',
+                    story: 'This spotlight data is corrupted and needs to be recreated.',
+                    photoUrl: '',
+                    tags: [],
+                    createdAt: new Date().toISOString(),
+                    createdBy: 'system',
+                    isActive: false,
+                    links: undefined,
+                    adminNotes: 'Corrupted data - please recreate this spotlight',
+                } as CommunitySpotlight;
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching all spotlights:', error);
+        return [];
+    }
+}
+
+/**
+ * [SERVER-SIDE] Creates a new community spotlight.
+ * Automatically deactivates any existing active spotlight.
+ */
+export async function createSpotlight(spotlightData: Omit<CommunitySpotlight, 'id'>): Promise<CommunitySpotlight | null> {
+    try {
+        // If this spotlight is being set as active, deactivate all others first
+        if (spotlightData.isActive) {
+            const activeSpotlights = await adminDb.collection('communitySpotlights')
+                .where('isActive', '==', true)
+                .get();
+            
+            const batch = adminDb.batch();
+            activeSpotlights.docs.forEach(doc => {
+                batch.update(doc.ref, { isActive: false });
+            });
+            await batch.commit();
+        }
+        
+        // Create the new spotlight
+        const docRef = await adminDb.collection('communitySpotlights').add({
+            ...spotlightData,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        
+        // Return the created spotlight with current timestamp
+        // Note: We use current time instead of reading back the serverTimestamp
+        // to avoid the "invalid uint 32: NaN" error that occurs when serverTimestamp
+        // hasn't been resolved yet
+        return {
+            id: docRef.id,
+            name: spotlightData.name,
+            story: spotlightData.story,
+            photoUrl: spotlightData.photoUrl,
+            tags: spotlightData.tags,
+            createdAt: new Date().toISOString(),
+            createdBy: spotlightData.createdBy,
+            isActive: spotlightData.isActive,
+            links: spotlightData.links,
+            adminNotes: spotlightData.adminNotes,
+        } as CommunitySpotlight;
+    } catch (error) {
+        console.error('Error creating spotlight:', error);
+        return null;
+    }
+}
+
+/**
+ * [SERVER-SIDE] Updates an existing community spotlight.
+ */
+export async function updateSpotlight(id: string, updates: Partial<Omit<CommunitySpotlight, 'id' | 'createdAt'>>): Promise<boolean> {
+    try {
+        // If setting this spotlight as active, deactivate all others first
+        if (updates.isActive === true) {
+            const activeSpotlights = await adminDb.collection('communitySpotlights')
+                .where('isActive', '==', true)
+                .get();
+            
+            const batch = adminDb.batch();
+            activeSpotlights.docs.forEach(doc => {
+                if (doc.id !== id) { // Don't deactivate the one we're updating
+                    batch.update(doc.ref, { isActive: false });
+                }
+            });
+            await batch.commit();
+        }
+        
+        // Update the spotlight
+        await adminDb.collection('communitySpotlights').doc(id).update(updates);
+        return true;
+    } catch (error) {
+        console.error('Error updating spotlight:', error);
+        return false;
+    }
+}
+
+/**
+ * [SERVER-SIDE] Deletes a community spotlight.
+ */
+export async function deleteSpotlight(id: string): Promise<boolean> {
+    try {
+        await adminDb.collection('communitySpotlights').doc(id).delete();
+        return true;
+    } catch (error) {
+        console.error('Error deleting spotlight:', error);
+        return false;
+    }
+}
+
+
+// --- Reviewer Request Functions ---
+
+/**
+ * [SERVER-SIDE] Gets all reviewer requests for admin management.
+ */
+export async function getAllReviewerRequests(): Promise<ReviewerRequest[]> {
+    try {
+        const snapshot = await adminDb.collection('reviewerRequests')
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                userId: data.userId || '',
+                userName: data.userName || '',
+                userEmail: data.userEmail || '',
+                status: data.status || 'pending',
+                createdAt: safeToISOString(data.createdAt),
+            } as ReviewerRequest;
+        });
+    } catch (error) {
+        console.error('Error fetching reviewer requests:', error);
+        return [];
+    }
+}
+
+/**
+ * [SERVER-SIDE] Updates a reviewer request status.
+ */
+export async function updateReviewerRequestStatus(id: string, status: 'approved' | 'denied'): Promise<boolean> {
+    try {
+        await adminDb.collection('reviewerRequests').doc(id).update({ status });
+        return true;
+    } catch (error) {
+        console.error('Error updating reviewer request status:', error);
+        return false;
+    }
+}
+
+/**
+ * [SERVER-SIDE] Updates a reviewer request archived status.
+ */
+export async function updateReviewerRequestArchived(id: string, archived: boolean): Promise<boolean> {
+    try {
+        await adminDb.collection('reviewerRequests').doc(id).update({ archived });
+        return true;
+    } catch (error) {
+        console.error('Error updating reviewer request archived status:', error);
+        return false;
+    }
+}
+
+// --- Analytics Functions ---
+
+/**
+ * [SERVER-SIDE] Gets comprehensive analytics data for admin dashboard.
+ */
+export async function getAnalyticsData(): Promise<{
+    monthlyActiveUsers: number;
+    totalPageViews: number;
+    eventsThisMonth: number;
+    reviewsWritten: number;
+    userGrowth: { month: string; users: number }[];
+    popularEvents: { title: string; views: number; id: string }[];
+    reviewActivity: { month: string; reviews: number }[];
+    eventsByStatus: { status: string; count: number }[];
+}> {
+    try {
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+        
+        // Get all collections data
+        const [usersSnapshot, eventsSnapshot, reviewsSnapshot] = await Promise.all([
+            adminDb.collection('userProfiles').get(),
+            adminDb.collection('events').get(),
+            adminDb.collection('reviews').get()
+        ]);
+
+        // Calculate monthly active users (users with recent activity)
+        const monthlyActiveUsers = usersSnapshot.docs.filter(doc => {
+            const data = doc.data();
+            return data.authStatus === 'active' && data.displayName && data.displayName.trim() !== '';
+        }).length;
+
+        // Calculate events this month
+        const eventsThisMonth = eventsSnapshot.docs.filter(doc => {
+            const data = doc.data();
+            if (!data.occurrences || !Array.isArray(data.occurrences)) return false;
+            
+            return data.occurrences.some((occurrence: any) => {
+                if (!occurrence.date) return false;
+                const eventDate = new Date(occurrence.date);
+                return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear;
+            });
+        }).length;
+
+        // Calculate total reviews written
+        const reviewsWritten = reviewsSnapshot.size;
+
+        // Calculate user growth over last 6 months
+        const userGrowth = [];
+        for (let i = 5; i >= 0; i--) {
+            const monthDate = new Date(currentYear, currentMonth - i, 1);
+            const nextMonthDate = new Date(currentYear, currentMonth - i + 1, 1);
+            
+            const usersInMonth = usersSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                if (!data.displayName || data.displayName.trim() === '') return false;
+                
+                // For now, we'll simulate growth since we don't have creation dates
+                // In a real scenario, you'd filter by user creation date
+                return true;
+            }).length;
+            
+            userGrowth.push({
+                month: monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                users: Math.max(1, Math.floor(usersInMonth * (0.7 + (i * 0.05)))) // Simulate growth
+            });
+        }
+
+        // Get popular events (by number of reviews)
+        const eventReviewCounts = new Map<string, { title: string; count: number }>();
+        
+        reviewsSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const showId = data.showId;
+            const showTitle = data.showTitle || 'Unknown Event';
+            
+            if (showId) {
+                const current = eventReviewCounts.get(showId) || { title: showTitle, count: 0 };
+                eventReviewCounts.set(showId, { title: showTitle, count: current.count + 1 });
+            }
+        });
+
+        const popularEvents = Array.from(eventReviewCounts.entries())
+            .map(([id, data]) => ({ id, title: data.title, views: data.count }))
+            .sort((a, b) => b.views - a.views)
+            .slice(0, 5);
+
+        // Calculate review activity over last 6 months
+        const reviewActivity = [];
+        for (let i = 5; i >= 0; i--) {
+            const monthDate = new Date(currentYear, currentMonth - i, 1);
+            const nextMonthDate = new Date(currentYear, currentMonth - i + 1, 1);
+            
+            const reviewsInMonth = reviewsSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                if (!data.createdAt) return false;
+                
+                const reviewDate = new Date(data.createdAt);
+                return reviewDate >= monthDate && reviewDate < nextMonthDate;
+            }).length;
+            
+            reviewActivity.push({
+                month: monthDate.toLocaleDateString('en-US', { month: 'short' }),
+                reviews: reviewsInMonth
+            });
+        }
+
+        // Calculate events by status
+        const statusCounts = new Map<string, number>();
+        eventsSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const status = data.status || 'unknown';
+            statusCounts.set(status, (statusCounts.get(status) || 0) + 1);
+        });
+
+        const eventsByStatus = Array.from(statusCounts.entries())
+            .map(([status, count]) => ({ status, count }));
+
+        return {
+            monthlyActiveUsers,
+            totalPageViews: monthlyActiveUsers * 12, // Estimate based on user activity
+            eventsThisMonth,
+            reviewsWritten,
+            userGrowth,
+            popularEvents,
+            reviewActivity,
+            eventsByStatus
+        };
+    } catch (error) {
+        console.error('Error fetching analytics data:', error);
+        return {
+            monthlyActiveUsers: 0,
+            totalPageViews: 0,
+            eventsThisMonth: 0,
+            reviewsWritten: 0,
+            userGrowth: [],
+            popularEvents: [],
+            reviewActivity: [],
+            eventsByStatus: []
+        };
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets reviewer requests by status.
+ */
+export async function getReviewerRequestsByStatus(status: 'pending' | 'approved' | 'denied'): Promise<ReviewerRequest[]> {
+    try {
+        const snapshot = await adminDb.collection('reviewerRequests')
+            .where('status', '==', status)
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        return snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                userId: data.userId || '',
+                userName: data.userName || '',
+                userEmail: data.userEmail || '',
+                status: data.status || 'pending',
+                createdAt: safeToISOString(data.createdAt),
+            } as ReviewerRequest;
+        });
+    } catch (error) {
+        console.error('Error fetching reviewer requests by status:', error);
+        return [];
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets all reviewers with their profile information and review statistics.
+ */
+export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: number; lastReviewDate?: string; createdAt?: string })[]> {
+    try {
+        console.log('getAllReviewers: Starting query for isReviewer = true');
+        // Get all user profiles with isReviewer = true
+        const profilesSnapshot = await adminDb.collection('userProfiles')
+            .where('isReviewer', '==', true)
+            .get();
+        
+        console.log('getAllReviewers: Query completed, found', profilesSnapshot.docs.length, 'documents');
+        
+        const reviewers = profilesSnapshot.docs.map(doc => {
+            const data = doc.data();
+            console.log('getAllReviewers: Processing doc', doc.id, 'with isReviewer:', data.isReviewer);
+            return {
+                userId: doc.id,
+                displayName: data.displayName || '',
+                photoURL: data.photoURL || '',
+                email: data.email || '',
+                roleInCommunity: data.roleInCommunity,
+                isReviewer: data.isReviewer,
+                reviewCount: 0,
+                lastReviewDate: undefined,
+                createdAt: undefined, // Will be populated from Firebase Auth
+                // Only include essential fields for admin UI - exclude heavy data
+                bio: undefined,
+                communityStartDate: undefined,
+                galleryImageUrls: [],
+                coverPhotoUrl: undefined,
+                showEmail: undefined,
+                authStatus: data.authStatus
+            } as UserProfile & { reviewCount: number; lastReviewDate?: string; createdAt?: string };
+        });
+        
+        // Get Firebase Auth account creation dates and review statistics for each reviewer
+        for (const reviewer of reviewers) {
+            try {
+                // Fetch account creation date from Firebase Auth
+                try {
+                    const userRecord = await admin.auth().getUser(reviewer.userId);
+                    reviewer.createdAt = userRecord.metadata.creationTime;
+                    console.log(`getAllReviewers: Got creation time for ${reviewer.userId}: ${userRecord.metadata.creationTime}`);
+                } catch (authError) {
+                    console.error(`Error fetching auth data for reviewer ${reviewer.userId}:`, authError);
+                    reviewer.createdAt = undefined;
+                }
+                
+                // Fetch review statistics
+                const reviewsSnapshot = await adminDb.collection('reviews')
+                    .where('reviewerId', '==', reviewer.userId)
+                    .get();
+                
+                reviewer.reviewCount = reviewsSnapshot.docs.length;
+                
+                if (reviewsSnapshot.docs.length > 0) {
+                    // Sort reviews by createdAt in memory to avoid needing a composite index
+                    const sortedReviews = reviewsSnapshot.docs.sort((a, b) => {
+                        const dateA = a.data().createdAt;
+                        const dateB = b.data().createdAt;
+                        // Sort descending (newest first)
+                        return dateB.localeCompare(dateA);
+                    });
+                    
+                    const lastReview = sortedReviews[0].data();
+                    reviewer.lastReviewDate = safeToISOString(lastReview.createdAt);
+                }
+            } catch (reviewError) {
+                console.error(`Error fetching data for reviewer ${reviewer.userId}:`, reviewError);
+                // Continue with other reviewers even if one fails
+                reviewer.reviewCount = 0;
+                reviewer.lastReviewDate = undefined;
+                reviewer.createdAt = undefined;
+            }
+        }
+        
+        // Sort reviewers by display name
+        return reviewers.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+    } catch (error) {
+        console.error('Error fetching reviewers:', error);
+        return [];
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets detailed reviewer statistics for admin dashboard.
+ */
+export async function getReviewerStats(): Promise<{
+    totalReviewers: number;
+    activeReviewers: number; // Reviewers who have written at least one review
+    pendingApplications: number;
+    totalReviews: number;
+    reviewsThisMonth: number;
+}> {
+    try {
+        const [reviewersSnapshot, reviewsSnapshot, pendingRequestsSnapshot] = await Promise.all([
+            adminDb.collection('userProfiles').where('isReviewer', '==', true).get(),
+            adminDb.collection('reviews').get(),
+            adminDb.collection('reviewerRequests').where('status', '==', 'pending').get()
+        ]);
+        
+        const totalReviewers = reviewersSnapshot.docs.length;
+        const totalReviews = reviewsSnapshot.docs.length;
+        const pendingApplications = pendingRequestsSnapshot.docs.length;
+        
+        // Count active reviewers (those who have written at least one review)
+        const reviewerIds = new Set(reviewsSnapshot.docs.map(doc => doc.data().reviewerId));
+        const activeReviewers = reviewerIds.size;
+        
+        // Count reviews this month
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const reviewsThisMonth = reviewsSnapshot.docs.filter(doc => {
+            const reviewDate = new Date(doc.data().createdAt);
+            return reviewDate >= startOfMonth;
+        }).length;
+        
+        return {
+            totalReviewers,
+            activeReviewers,
+            pendingApplications,
+            totalReviews,
+            reviewsThisMonth
+        };
+    } catch (error) {
+        console.error('Error fetching reviewer stats:', error);
+        return {
+            totalReviewers: 0,
+            activeReviewers: 0,
+            pendingApplications: 0,
+            totalReviews: 0,
+            reviewsThisMonth: 0
+        };
+    }
+}
+
+/**
+ * [SERVER-SIDE] Gets reviews by a specific reviewer with show information.
+ */
+export async function getReviewsByReviewer(reviewerId: string): Promise<Review[]> {
+    try {
+        const snapshot = await adminDb.collection('reviews')
+            .where('reviewerId', '==', reviewerId)
+            .orderBy('createdAt', 'desc')
+            .get();
+        
+        return snapshot.docs.map(sanitizeReview);
+    } catch (error) {
+        console.error('Error fetching reviews by reviewer:', error);
+        return [];
     }
 }

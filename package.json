@@ -10,7 +10,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "migrate": "tsx src/lib/migration.ts"
+    "migrate": "tsx src/lib/migration.ts",
+    "test:reviewer-invitation": "node scripts/run-reviewer-invitation-tests.js",
+    "test:reviewer-invitation:unit": "node scripts/run-reviewer-invitation-tests.js --unit-only",
+    "test:reviewer-invitation:verbose": "node scripts/run-reviewer-invitation-tests.js --verbose",
+    "test:reviewer-invitation:ci": "node scripts/run-reviewer-invitation-tests.js --skip-cleanup",
+    "archive:accepted-invitations": "node scripts/archive-accepted-invitations.js"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.13.0",
@@ -52,7 +57,9 @@
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
     "react-hook-form": "^7.54.2",
+    "react-swipeable": "^7.0.2",
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",

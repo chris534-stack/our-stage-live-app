@@ -7,8 +7,8 @@ import ProfileLoading from './loading';
 import type { Review, UserProfile } from '@/lib/types';
 
 
-export default async function ProfilePage({ params }: { params: { userId: string } }) {
-  const { userId } = params;
+export default async function ProfilePage({ params }: { params: Promise<{ userId: string }> }) {
+  const { userId } = await params;
 
   try {
     const profile = await getOrCreateUserProfile(userId);

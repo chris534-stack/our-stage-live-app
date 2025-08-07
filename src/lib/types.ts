@@ -74,6 +74,11 @@ export type Review = {
     dislikes: number;
     votedBy: string[];
     disclosureText: string;
+    // Revision flags for admin moderation
+    flaggedForRevision?: boolean;
+    flaggedReason?: string;
+    flaggedAt?: string;
+    flaggedBy?: string;
 };
 
 // An "Expanded Event" is a single performance instance, derived from a parent Event
@@ -92,6 +97,7 @@ export type ReviewerRequest = {
     userEmail: string;
     status: 'pending' | 'approved' | 'denied';
     createdAt: string;
+    archived?: boolean;              // Whether this request has been archived
 };
 
 export type UserProfile = {
@@ -106,4 +112,37 @@ export type UserProfile = {
   coverPhotoUrl?: string;
   showEmail?: boolean;
   authStatus?: 'active' | 'notFound';
+  isReviewer?: boolean;
+};
+
+export type ReviewerInvitation = {
+  id: string;
+  email: string;                   // Email address of invitee
+  token: string;                   // Secure, single-use token
+  invitedBy: string;               // Admin user ID who sent invite
+  invitedByName: string;           // Admin display name
+  createdAt: string;               // When invitation was created
+  expiresAt: string;               // When invitation expires (7 days)
+  status: 'pending' | 'accepted' | 'expired';
+  usedAt?: string;                 // When invitation was used (if accepted)
+  acceptedByUserId?: string;       // Firebase user ID who accepted
+  archived?: boolean;              // Whether this invitation has been archived
+};
+
+export type CommunitySpotlight = {
+  id: string;
+  name: string;                    // Person being spotlighted
+  story: string;                   // Admin-written recognition narrative
+  photoUrl: string;                // Uploaded photo (not tied to platform profile)
+  tags: string[];                  // Role badges: ["Director", "Actor", "Volunteer", etc.]
+  createdAt: string;               // When spotlight was created
+  createdBy: string;               // Admin who created it
+  isActive: boolean;               // Only one can be active at a time
+  
+  // Optional fields:
+  links?: {                        // Optional external links
+    website?: string;
+    social?: string;
+  };
+  adminNotes?: string;             // Internal admin notes
 };

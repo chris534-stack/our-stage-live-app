@@ -8,14 +8,16 @@ import { useState, useEffect, useTransition, useRef } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Edit, Mail, Shield, Drama, Wrench, Users, Camera, CalendarClock, GalleryVerticalEnd, Upload, Loader2, Shuffle, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { getOptimizedProfilePhoto } from '@/lib/image-utils';
 import Link from 'next/link';
 import { ReviewPreviewCard } from '@/components/reviews/ReviewPreviewCard';
 import { EditProfileSheet } from '@/components/profile/EditProfileSheet';
-import { PhotoUploader } from '@/components/profile/PhotoUploader';
+import { MultiPhotoUploader } from '@/components/profile/MultiPhotoUploader';
 import { GalleryViewer } from './GalleryViewer';
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
+import { OptimizedGallery } from './OptimizedGallery';
 import { useToast } from '@/hooks/use-toast';
 import { updateGalleryOrderAction, deleteProfilePhotoAction, setProfilePhotoAction, setCoverPhotoAction, uploadProfilePhotoAction } from '@/lib/actions';
 import { cn } from '@/lib/utils';
@@ -68,13 +70,15 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     const [isSheetOpen, setIsSheetOpen] = useState(false);
     const [yearsInCommunity, setYearsInCommunity] = useState<string | null>(null);
     const GALLERY_PHOTO_LIMIT = 50;
-    const PHOTOS_PER_PAGE = 4;
+    const PHOTOS_PER_PAGE_DESKTOP = 4;
+    const PHOTOS_PER_PAGE_MOBILE = 2;
 
     const [isGalleryViewerOpen, setIsGalleryViewerOpen] = useState(false);
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
     const [isReorderPending, startReorderTransition] = useTransition();
     const [isUploadPending, startUploadTransition] = useTransition();
+    const [showUploadModal, setShowUploadModal] = useState(false);
     const { toast } = useToast();
     
     const [isReordering, setIsReordering] = useState(false);
@@ -139,34 +143,8 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         // This avoids client-side state mismatches.
     };
     
-    const handleHeaderUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
-
-        const file = files[0];
-        const formData = new FormData();
-        formData.append('photo', file);
-        formData.append('userId', profile.userId);
-
-        startUploadTransition(async () => {
-            const result = await uploadProfilePhotoAction(formData);
-            if (result.success) {
-                toast({
-                    title: 'Upload successful!',
-                    description: 'Your photo has been added to the gallery.',
-                });
-                onProfileUpdate(); // This will trigger a re-render with fresh data due to revalidatePath
-                if(headerFileInputRef.current) {
-                    headerFileInputRef.current.value = ""; // Reset file input
-                }
-            } else {
-                toast({
-                    variant: 'destructive',
-                    title: 'Upload failed',
-                    description: result.message,
-                });
-            }
-        });
+    const handleHeaderUpload = () => {
+        setShowUploadModal(true);
     };
 
     const handleOpenGallery = (index: number) => {
@@ -244,24 +222,43 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     };
 
     const itemsToShowInGrid = [
-        ...(isReordering ? orderedGalleryUrls : (profile.galleryImageUrls || [])),
-        ...(isOwner && !isReordering && !isDeleting && canUpload ? ['uploader'] : [])
+        ...(isReordering ? orderedGalleryUrls : (profile.galleryImageUrls || []))
+        // Removed uploader tile - users now use the Upload button in the header
     ];
     const pages = [];
-    for (let i = 0; i < itemsToShowInGrid.length; i += PHOTOS_PER_PAGE) {
-        pages.push(itemsToShowInGrid.slice(i, i + PHOTOS_PER_PAGE));
+    for (let i = 0; i < itemsToShowInGrid.length; i += PHOTOS_PER_PAGE_DESKTOP) {
+        pages.push(itemsToShowInGrid.slice(i, i + PHOTOS_PER_PAGE_DESKTOP));
     }
 
     return (
         <>
-            <input
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                ref={headerFileInputRef}
-                onChange={handleHeaderUpload}
-                disabled={isUploadPending}
-            />
+            {/* Upload Modal */}
+            {showUploadModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Upload Photos</h3>
+                            <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setShowUploadModal(false)}
+                                className="h-8 w-8 p-0"
+                            >
+                                ×
+                            </Button>
+                        </div>
+                        <MultiPhotoUploader 
+                            userId={profile.userId} 
+                            onUploadComplete={() => {
+                                handlePhotoUploadComplete();
+                                setShowUploadModal(false);
+                            }} 
+                            limit={GALLERY_PHOTO_LIMIT} 
+                            currentCount={currentPhotoCount} 
+                        />
+                    </div>
+                </div>
+            )}
             <div className="w-full pb-16">
                 <div className="h-48 md:h-64 bg-secondary relative">
                     <Image
@@ -278,7 +275,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                     <div className="flex flex-col md:flex-row md:items-end md:gap-8">
                         <div className="flex-shrink-0">
                             <Avatar className="h-36 w-36 border-4 border-background ring-2 ring-primary">
-                                <AvatarImage src={profile.photoURL} alt={profile.displayName} className="object-cover" />
+                                <AvatarImage src={getOptimizedProfilePhoto(profile.photoURL, 'profile')} alt={profile.displayName} className="object-cover" />
                                 <AvatarFallback>{profile.displayName.charAt(0)}</AvatarFallback>
                             </Avatar>
                         </div>
@@ -358,8 +355,8 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                             ) : (
                                                 <>
                                                     {isOwner && canUpload && (
-                                                        <Button size="sm" onClick={() => headerFileInputRef.current?.click()} disabled={isUploadPending}>
-                                                            {isUploadPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="sm:mr-2 h-4 w-4" />}
+                                                        <Button size="sm" onClick={handleHeaderUpload} disabled={isUploadPending}>
+                                                            <Upload className="sm:mr-2 h-4 w-4" />
                                                             <span className="hidden sm:inline">Upload</span>
                                                         </Button>
                                                     )}
@@ -370,7 +367,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                         </div>
                                     )}
                                 </CardHeader>
-                                <CardContent>
+                                <CardContent className="px-2 sm:px-6">
                                     {isDeleting && (
                                         <Alert variant="destructive" className="mb-4">
                                             <ShieldAlert className="h-4 w-4" />
@@ -381,9 +378,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                         </Alert>
                                     )}
                                     {itemsToShowInGrid.length === 0 ? (
-                                        isOwner && canUpload ? (
-                                            <PhotoUploader userId={profile.userId} onUploadComplete={handlePhotoUploadComplete} limit={GALLERY_PHOTO_LIMIT} currentCount={currentPhotoCount} />
-                                        ) : !canUpload ? (
+                                        !canUpload ? (
                                             <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
                                                 <GalleryVerticalEnd className="h-10 w-10 mb-2" />
                                                 <p className="font-medium text-foreground">Gallery Full</p>
@@ -393,73 +388,27 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                             <div className="flex flex-col items-center justify-center text-center text-muted-foreground p-8 border-2 border-dashed rounded-lg">
                                                 <Camera className="h-10 w-10 mb-2" />
                                                 <p className="font-medium">No Photos Yet</p>
-                                                <p className="text-sm">This user hasn't added any photos to their gallery.</p>
+                                                <p className="text-sm">{isOwner ? "Use the Upload button above to add photos to your gallery." : "This user hasn't added any photos to their gallery."}</p>
                                             </div>
                                         )
                                     ) : (
-                                        <Carousel opts={{ align: "start" }} className="w-full relative px-8 sm:px-12">
-                                            <CarouselContent>
-                                                {pages.map((pageItems, pageIndex) => (
-                                                    <CarouselItem key={pageIndex}>
-                                                        <div className="grid grid-cols-2 gap-4">
-                                                            {pageItems.map((item, itemIndex) => {
-                                                                if (item === 'uploader') {
-                                                                    return <PhotoUploader key="uploader" userId={profile.userId} onUploadComplete={handlePhotoUploadComplete} isGridItem={true} limit={GALLERY_PHOTO_LIMIT} currentCount={currentPhotoCount} />;
-                                                                }
-                                                                const originalImageIndex = pageIndex * PHOTOS_PER_PAGE + itemIndex;
-                                                                const url = isReordering ? orderedGalleryUrls[originalImageIndex] : item;
-                                                                const isSelectedForMove = selectedPhotoToMove === url;
-                                                                
-                                                                return (
-                                                                    <div
-                                                                        key={url}
-                                                                        onClick={() => isReordering ? handleReorderClick(url, originalImageIndex) : handleOpenGallery(originalImageIndex)}
-                                                                        className={cn(
-                                                                            "aspect-square relative rounded-lg overflow-hidden group transition-all duration-200",
-                                                                            (isReordering || !isDeleting) && "cursor-pointer",
-                                                                            isReordering && isSelectedForMove && "ring-4 ring-offset-2 ring-primary z-10 scale-105 shadow-lg",
-                                                                            isReordering && selectedPhotoToMove && !isSelectedForMove && "opacity-60 hover:opacity-100 hover:scale-105"
-                                                                        )}
-                                                                    >
-                                                                        <Image src={url} alt={`Gallery image ${originalImageIndex + 1}`} fill className="object-cover" data-ai-hint="production photo" unoptimized />
-                                                                        <div className={cn(
-                                                                            "absolute inset-0 bg-black/0 transition-colors flex items-center justify-center",
-                                                                            !isDeleting && !isReordering && "group-hover:bg-black/20",
-                                                                            isReordering && "group-hover:bg-black/40",
-                                                                            isDeleting && "group-hover:bg-black/50"
-                                                                        )} >
-                                                                            {isReordering && selectedPhotoToMove && !isSelectedForMove && (
-                                                                                <p className="text-white font-bold text-sm bg-black/50 p-2 rounded-md opacity-0 group-hover:opacity-100">Place Here</p>
-                                                                            )}
-                                                                        </div>
-                                                                        {isDeleting && (
-                                                                            <Button
-                                                                                variant="destructive"
-                                                                                size="icon"
-                                                                                className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity z-20"
-                                                                                onClick={(e) => { e.stopPropagation(); handleDeleteClick(url); }}
-                                                                                disabled={isDeletePending}
-                                                                            >
-                                                                                <Trash2 className="h-4 w-4" />
-                                                                            </Button>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </CarouselItem>
-                                                ))}
-                                            </CarouselContent>
-                                            <CarouselPrevious className="absolute left-1 top-1/2 -translate-y-1/2 z-10" />
-                                            <CarouselNext className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
-                                        </Carousel>
+                                        <OptimizedGallery
+                                            images={itemsToShowInGrid}
+                                            onImageClick={handleOpenGallery}
+                                            isReordering={isReordering}
+                                            isDeleting={isDeleting}
+                                            selectedPhotoToMove={selectedPhotoToMove}
+                                            onReorderClick={handleReorderClick}
+                                            onDeleteClick={handleDeleteClick}
+                                            isOwner={isOwner}
+                                        />
                                     )}
                                 </CardContent>
                             </Card>
                              <section>
                                 <h2 className="text-2xl font-bold font-headline mb-4">Recent Reviews</h2>
                                 {initialReviews.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-1 md:grid-cols-2 sm:gap-6">
                                         {initialReviews.map(review => (
                                             <ReviewPreviewCard key={review.id} review={review} />
                                         ))}

@@ -394,16 +394,139 @@ export async function uploadProfilePhotoAction(formData: FormData) {
         await fileUpload.makePublic();
         const publicUrl = fileUpload.publicUrl();
 
-        // Update user profile in Firestore
-        await profileRef.update({
+        // Update user profile in Firestore (create document if it doesn't exist)
+        await profileRef.set({
             galleryImageUrls: admin.firestore.FieldValue.arrayUnion(publicUrl),
-        });
+        }, { merge: true });
 
         revalidatePath(`/profile/${userId}`);
 
         return { success: true };
     } catch (error) {
         console.error('Failed to upload photo:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Upload failed: ${errorMessage}` };
+    }
+}
+
+export async function uploadMultiplePhotosAction(
+    formData: FormData, 
+    onProgress?: (progress: number) => void
+) {
+    const userId = formData.get('userId') as string;
+    const files = formData.getAll('photos') as File[];
+    const GALLERY_PHOTO_LIMIT = 50;
+
+    if (!files || files.length === 0 || !userId) {
+        return { success: false, message: 'Missing files or user ID.' };
+    }
+
+    // Check storage bucket configuration
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    if (!storageBucket) {
+        console.error('Server configuration error: FIREBASE_STORAGE_BUCKET is not set.');
+        return { success: false, message: 'Server configuration error: Storage destination not found.' };
+    }
+
+    const profileRef = adminDb.collection('userProfiles').doc(userId);
+
+    try {
+        // Check current photo count
+        const docSnap = await profileRef.get();
+        let currentPhotoCount = 0;
+        if (docSnap.exists) {
+            const profileData = docSnap.data() as UserProfile;
+            currentPhotoCount = profileData.galleryImageUrls?.length || 0;
+        }
+
+        // Check if adding these files would exceed the limit
+        if (currentPhotoCount + files.length > GALLERY_PHOTO_LIMIT) {
+            const remainingSlots = GALLERY_PHOTO_LIMIT - currentPhotoCount;
+            return { 
+                success: false, 
+                message: `Cannot upload ${files.length} photos. You can only add ${remainingSlots} more photo${remainingSlots !== 1 ? 's' : ''} (limit: ${GALLERY_PHOTO_LIMIT}).` 
+            };
+        }
+
+        const bucket = admin.storage().bucket(storageBucket);
+        const uploadedUrls: string[] = [];
+        const errors: string[] = [];
+
+        // Process files in batches to avoid overwhelming the system
+        const batchSize = 5;
+        for (let i = 0; i < files.length; i += batchSize) {
+            const batch = files.slice(i, i + batchSize);
+            
+            const batchPromises = batch.map(async (file, batchIndex) => {
+                try {
+                    const buffer = Buffer.from(await file.arrayBuffer());
+                    const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}-${file.name}`;
+                    const fileUpload = bucket.file(fileName);
+
+                    await fileUpload.save(buffer, {
+                        metadata: {
+                            contentType: file.type,
+                        },
+                    });
+
+                    // Make the file public
+                    await fileUpload.makePublic();
+                    const publicUrl = fileUpload.publicUrl();
+                    
+                    return { success: true as const, url: publicUrl, fileName: file.name };
+                } catch (error) {
+                    console.error(`Failed to upload ${file.name}:`, error);
+                    return { 
+                        success: false as const, 
+                        error: error instanceof Error ? error.message : String(error),
+                        fileName: file.name 
+                    };
+                }
+            });
+
+            const batchResults = await Promise.all(batchPromises);
+            
+            // Process batch results
+            batchResults.forEach((result) => {
+                if (result.success) {
+                    uploadedUrls.push(result.url);
+                } else {
+                    errors.push(`${result.fileName}: ${result.error}`);
+                }
+            });
+
+            // Update progress
+            if (onProgress) {
+                const progress = Math.round(((i + batch.length) / files.length) * 100);
+                onProgress(progress);
+            }
+        }
+
+        // Update Firestore with successfully uploaded URLs
+        if (uploadedUrls.length > 0) {
+            await profileRef.set({
+                galleryImageUrls: admin.firestore.FieldValue.arrayUnion(...uploadedUrls),
+            }, { merge: true });
+        }
+
+        revalidatePath(`/profile/${userId}`);
+
+        // Return results
+        if (uploadedUrls.length === files.length) {
+            return { success: true, message: `Successfully uploaded ${uploadedUrls.length} photos.` };
+        } else if (uploadedUrls.length > 0) {
+            return { 
+                success: true, 
+                message: `Uploaded ${uploadedUrls.length} of ${files.length} photos. ${errors.length} failed: ${errors.slice(0, 2).join(', ')}${errors.length > 2 ? '...' : ''}` 
+            };
+        } else {
+            return { 
+                success: false, 
+                message: `All uploads failed. Errors: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}` 
+            };
+        }
+    } catch (error) {
+        console.error('Failed to upload multiple photos:', error);
         const errorMessage = error instanceof Error ? error.message : String(error);
         return { success: false, message: `Upload failed: ${errorMessage}` };
     }
@@ -436,13 +559,76 @@ export async function deleteProfilePhotoAction(userId: string, photoUrl: string)
         const bucket = admin.storage().bucket(storageBucket);
         
         // Extract the file path from the Google Cloud Storage public URL
-        const url = new URL(photoUrl);
-        const pathParts = url.pathname.split('/');
-        const filePath = pathParts.slice(2).join('/'); // Skips the initial empty string and the bucket name
+        let filePath: string;
         
-        if (!filePath || !filePath.startsWith(`${userId}/`)) {
+        console.log('=== IMAGE DELETION DEBUG ===');
+        console.log('User ID:', userId);
+        console.log('Photo URL:', photoUrl);
+        
+        try {
+            const url = new URL(photoUrl);
+            console.log('Parsed URL:', {
+                hostname: url.hostname,
+                pathname: url.pathname,
+                search: url.search,
+                full: url.toString()
+            });
+            
+            // Handle different Firebase Storage URL formats
+            if (url.hostname === 'storage.googleapis.com') {
+                // Format: https://storage.googleapis.com/bucket-name/path/to/file
+                const pathParts = url.pathname.split('/').filter(part => part.length > 0);
+                console.log('storage.googleapis.com format detected');
+                console.log('Path parts:', pathParts);
+                
+                if (pathParts.length >= 2) {
+                    filePath = decodeURIComponent(pathParts.slice(1).join('/'));
+                    console.log('Extracted file path:', filePath);
+                } else {
+                    throw new Error('Invalid URL format: insufficient path parts');
+                }
+            } else if (url.hostname.includes('firebasestorage.googleapis.com') || url.hostname.endsWith('.firebasestorage.app')) {
+                // Format: https://firebasestorage.googleapis.com/v0/b/bucket-name/o/encoded-path?alt=media
+                console.log('Firebase Storage hosted URL detected');
+                if (url.hostname.includes('firebasestorage.googleapis.com')) {
+                    // Format: https://firebasestorage.googleapis.com/v0/b/bucket-name/o/encoded-path?alt=media
+                    const pathMatch = url.pathname.match(/\/o\/(.+)$/);
+                    console.log('Path match result:', pathMatch);
+
+                    if (pathMatch) {
+                        filePath = decodeURIComponent(pathMatch[1]);
+                        console.log('Extracted file path:', filePath);
+                    } else {
+                        throw new Error('Invalid Firebase Storage URL format');
+                    }
+                } else {
+                    // Format: https://<bucket>.firebasestorage.app/path/to/file
+                    filePath = decodeURIComponent(url.pathname.slice(1)); // remove leading '/'
+                    console.log('firebasestorage.app format detected');
+                    console.log('Extracted file path:', filePath);
+                }
+            } else {
+                throw new Error(`Unsupported storage hostname: ${url.hostname}`);
+            }
+            
+            console.log('Security check - filePath:', filePath);
+            console.log('Security check - expected prefix:', `${userId}/`);
+            console.log('Security check - starts with user ID:', filePath.startsWith(`${userId}/`));
+            
             // Security check to ensure we're not deleting files outside the user's folder
-            throw new Error("Invalid file path for deletion.");
+            if (!filePath || !filePath.startsWith(`${userId}/`)) {
+                throw new Error(`Invalid file path for deletion. Path: ${filePath}, Expected to start with: ${userId}/`);
+            }
+            
+            console.log('Security check passed, file path:', filePath);
+            
+        } catch (error) {
+            console.error('Failed to parse photo URL for deletion:', {
+                photoUrl,
+                userId,
+                error: error instanceof Error ? error.message : String(error)
+            });
+            throw new Error(`Invalid file path for deletion. ${error instanceof Error ? error.message : 'Unknown parsing error'}`);
         }
 
         const file = bucket.file(filePath);
@@ -519,5 +705,230 @@ export async function setCoverPhotoAction(userId: string, photoUrl: string) {
         console.error('Failed to set cover photo:', error);
         const errorMessage = error instanceof Error ? error.message : String(error);
         return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
+    }
+}
+
+// --- Community Spotlight Actions ---
+
+export async function uploadSpotlightPhotoAction(formData: FormData) {
+    const file = formData.get('photo') as File;
+    const type = formData.get('type') as string;
+
+    if (!file || !type) {
+        return { success: false, message: 'Missing file or type.' };
+    }
+    
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
+    if (!storageBucket) {
+        console.error('Server configuration error: FIREBASE_STORAGE_BUCKET is not set.');
+        return { success: false, message: 'Server configuration error: Storage destination not found.' };
+    }
+
+    try {
+        const bucket = admin.storage().bucket(storageBucket);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const fileName = `spotlights/${Date.now()}-${file.name}`;
+        const fileUpload = bucket.file(fileName);
+
+        await fileUpload.save(buffer, {
+            metadata: {
+                contentType: file.type,
+            },
+        });
+
+        // Make the file public to get a URL
+        await fileUpload.makePublic();
+        const publicUrl = fileUpload.publicUrl();
+
+        return { success: true, url: publicUrl };
+    } catch (error) {
+        console.error('Failed to upload spotlight photo:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Upload failed: ${errorMessage}` };
+    }
+}
+
+export async function createSpotlightAction(spotlightData: {
+    name: string;
+    story: string;
+    photoUrl: string;
+    tags: string[];
+    isActive: boolean;
+    links?: {
+        website?: string;
+        social?: string;
+    };
+    adminNotes?: string;
+}) {
+    try {
+        const { createSpotlight } = await import('@/lib/data');
+        
+        const newSpotlight = await createSpotlight({
+            ...spotlightData,
+            createdAt: new Date().toISOString(),
+            createdBy: 'admin', // TODO: Get from session when auth is implemented
+        });
+
+        if (!newSpotlight) {
+            return { success: false, message: 'Failed to create spotlight.' };
+        }
+
+        revalidatePath('/');
+        revalidatePath('/admin/spotlights');
+        
+        return { success: true, spotlight: newSpotlight };
+    } catch (error) {
+        console.error('Failed to create spotlight:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to create spotlight: ${errorMessage}` };
+    }
+}
+
+export async function updateSpotlightAction(id: string, updates: {
+    name?: string;
+    story?: string;
+    photoUrl?: string;
+    tags?: string[];
+    isActive?: boolean;
+    links?: {
+        website?: string;
+        social?: string;
+    };
+    adminNotes?: string;
+}) {
+    try {
+        const { updateSpotlight, getAllSpotlights } = await import('@/lib/data');
+        
+        const success = await updateSpotlight(id, updates);
+        
+        if (!success) {
+            return { success: false, message: 'Failed to update spotlight.' };
+        }
+
+        // Get the updated spotlight to return
+        const allSpotlights = await getAllSpotlights();
+        const updatedSpotlight = allSpotlights.find(s => s.id === id);
+        
+        if (!updatedSpotlight) {
+            return { success: false, message: 'Spotlight updated but could not retrieve updated data.' };
+        }
+
+        revalidatePath('/');
+        revalidatePath('/admin/spotlights');
+        
+        return { success: true, spotlight: updatedSpotlight };
+    } catch (error) {
+        console.error('Failed to update spotlight:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to update spotlight: ${errorMessage}` };
+    }
+}
+
+export async function deleteSpotlightAction(id: string) {
+    try {
+        const { deleteSpotlight } = await import('@/lib/data');
+        
+        const success = await deleteSpotlight(id);
+        
+        if (!success) {
+            return { success: false, message: 'Failed to delete spotlight.' };
+        }
+
+        revalidatePath('/');
+        revalidatePath('/admin/spotlights');
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to delete spotlight:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to delete spotlight: ${errorMessage}` };
+    }
+}
+
+/**
+ * Toggle reviewer status for a user (revoke or reinstate reviewer privileges)
+ */
+export async function toggleReviewerStatusAction(userId: string, isReviewer: boolean) {
+    try {
+        await adminDb.collection('userProfiles').doc(userId).update({
+            isReviewer: isReviewer
+        });
+
+        revalidatePath('/admin');
+        revalidatePath(`/profile/${userId}`);
+        
+        const action = isReviewer ? 'granted' : 'revoked';
+        return { success: true, message: `Reviewer status ${action} successfully.` };
+    } catch (error) {
+        console.error('Failed to toggle reviewer status:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to update reviewer status: ${errorMessage}` };
+    }
+}
+
+/**
+ * Delete a review (for moderation purposes)
+ */
+export async function deleteReviewAction(reviewId: string) {
+    try {
+        await adminDb.collection('reviews').doc(reviewId).delete();
+
+        revalidatePath('/reviews');
+        revalidatePath('/calendar');
+        revalidatePath('/admin');
+        
+        return { success: true, message: 'Review deleted successfully.' };
+    } catch (error) {
+        console.error('Failed to delete review:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to delete review: ${errorMessage}` };
+    }
+}
+
+/**
+ * Send a review back for revision (mark as needs revision)
+ */
+export async function flagReviewForRevisionAction(reviewId: string, reason: string) {
+    try {
+        await adminDb.collection('reviews').doc(reviewId).update({
+            flaggedForRevision: true,
+            flaggedReason: reason,
+            flaggedAt: new Date().toISOString(),
+            flaggedBy: 'admin' // TODO: Get from session when auth is implemented
+        });
+
+        revalidatePath('/reviews');
+        revalidatePath('/calendar');
+        revalidatePath('/admin');
+        
+        return { success: true, message: 'Review flagged for revision successfully.' };
+    } catch (error) {
+        console.error('Failed to flag review for revision:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to flag review: ${errorMessage}` };
+    }
+}
+
+/**
+ * Clear revision flag from a review
+ */
+export async function clearReviewRevisionFlagAction(reviewId: string) {
+    try {
+        await adminDb.collection('reviews').doc(reviewId).update({
+            flaggedForRevision: admin.firestore.FieldValue.delete(),
+            flaggedReason: admin.firestore.FieldValue.delete(),
+            flaggedAt: admin.firestore.FieldValue.delete(),
+            flaggedBy: admin.firestore.FieldValue.delete()
+        });
+
+        revalidatePath('/reviews');
+        revalidatePath('/calendar');
+        revalidatePath('/admin');
+        
+        return { success: true, message: 'Review revision flag cleared successfully.' };
+    } catch (error) {
+        console.error('Failed to clear review revision flag:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Failed to clear revision flag: ${errorMessage}` };
     }
 }
