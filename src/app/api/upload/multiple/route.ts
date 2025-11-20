@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadMultiplePhotosAction } from '@/lib/actions';
 
+// Ensure this route runs on the Node.js runtime so firebase-admin works in production
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const preferredRegion = 'us-central1';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

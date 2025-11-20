@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAllEvents } from '@/lib/data';
+import { getEventsByStatus } from '@/lib/data';
 
 export async function GET() {
   try {
-    const events = await getAllEvents({ includeOccurrences: true });
+    const events = await getEventsByStatus('approved');
     
     return NextResponse.json({
       events,

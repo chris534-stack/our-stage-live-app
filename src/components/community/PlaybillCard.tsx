@@ -55,6 +55,7 @@ export function PlaybillCard({ profile, onClick }: PlaybillCardProps) {
             src={getOptimizedProfilePhoto(profile.photoURL, 'playbill')}
             alt={`${profile.displayName}'s photo`}
             fill
+            sizes="(max-width: 768px) 100vw, 288px"
             style={{ objectFit: 'cover' }}
             className="transition-transform duration-500 group-hover:scale-110"
           />

@@ -37,13 +37,15 @@ import Link from 'next/link';
 import { ReviewList } from '@/components/reviews/ReviewList';
 import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { EventEditorForm } from '@/components/admin/EventEditorForm';
 import { useSwipeable } from 'react-swipeable';
 
 const AddEventButton = dynamic(
     () => import('@/components/admin/AddEventButton').then(mod => mod.AddEventButton),
     { ssr: false }
 );
-
 
 function getContrastingTextColor(color: string): string {
     if (!color) return '#ffffff';
@@ -99,16 +101,22 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
   const [currentMonth, setCurrentMonth] = React.useState<Date | undefined>();
   const [selectedVenues, setSelectedVenues] = React.useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = React.useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   const [isClient, setIsClient] = React.useState(false);
   const [selectedEventId, setSelectedEventId] = React.useState<string | null>(null);
-  const { user, isAdmin, isReviewer } = useAuth();
+  const { user, isAdmin, isReviewer, isVenueRep, hasSeenVenueRepIntro, venueRepOnboardingCompleted, venueRepPolicyAccepted, setHasSeenVenueRepIntro, setVenueRepOnboardingCompleted } = useAuth();
   const [editingEvent, setEditingEvent] = React.useState<Event | null>(null);
   const [isReviewModalOpen, setReviewModalOpen] = React.useState(false);
   const [selectedEventForReview, setSelectedEventForReview] = React.useState<ExpandedCalendarEvent | null>(null);
   const [touchStart, setTouchStart] = React.useState<number | null>(null);
   const [touchEnd, setTouchEnd] = React.useState<number | null>(null);
   const minSwipeDistance = 50;
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const [isOnboardingOpen, setOnboardingOpen] = React.useState(false);
+  const [onboardingStep, setOnboardingStep] = React.useState<number>(1);
+  const [isCreateEventOpen, setCreateEventOpen] = React.useState(false);
+  
   
   React.useEffect(() => {
     setIsClient(true);
@@ -127,21 +135,28 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
   }, [selectedDate, currentMonth]);
   
   const isMobile = useIsMobile();
+
+  // Open onboarding intro if redirected with query or user hasn't seen intro yet
+  useEffect(() => {
+    const onboardingParam = searchParams?.get('onboarding');
+    if (isVenueRep && (!hasSeenVenueRepIntro || onboardingParam === 'venue-rep')) {
+      setOnboardingOpen(true);
+      setOnboardingStep(1);
+      if (onboardingParam) {
+        router.replace(pathname);
+      }
+    }
+  }, [isVenueRep, hasSeenVenueRepIntro, searchParams, router, pathname]);
   
-  const { eventTypes, allTags } = useMemo(() => {
+  const eventTypes = useMemo(() => {
     const types = new Set<string>();
-    const tags = new Set<string>();
     events.forEach(e => {
         const eventType = e.type.trim().toLowerCase();
         if (eventType !== 'performance') {
             types.add(eventType);
         }
-        e.tags?.forEach(tag => tags.add(tag.trim().toLowerCase()));
     });
-    return {
-      eventTypes: Array.from(types).sort(),
-      allTags: Array.from(tags).sort(),
-    };
+    return Array.from(types).sort();
   }, [events]);
 
   const filteredEvents = useMemo(() => {
@@ -151,10 +166,9 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
     return events.filter(event => {
       const venueMatch = selectedVenues.length === 0 || selectedVenues.includes(event.venueId);
       const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(event.type.trim().toLowerCase());
-      const tagsMatch = selectedTags.length === 0 || event.tags?.some(tag => selectedTags.includes(tag.trim().toLowerCase()));
-      return venueMatch && typeMatch && tagsMatch;
+      return venueMatch && typeMatch;
     });
-  }, [events, selectedVenues, selectedTypes, selectedTags, selectedEventId]);
+  }, [events, selectedVenues, selectedTypes, selectedEventId]);
   
   const eventsByDate = useMemo(() => {
     const map = new Map<string, ExpandedCalendarEvent[]>();
@@ -174,6 +188,8 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
     return eventsByDate.get(dateString) || [];
   }, [selectedDate, eventsByDate]);
 
+  
+
   const handleVenueToggle = (venueId: string) => {
     setSelectedVenues(prev => 
       prev.includes(venueId) ? prev.filter(id => id !== venueId) : [...prev, venueId]
@@ -186,11 +202,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
     );
   };
   
-  const handleTagToggle = (tag: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-    );
-  };
+  
 
   const handleCardClick = (eventId: string) => {
     setSelectedEventId(prevId => (prevId === eventId ? null : eventId));
@@ -233,6 +245,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
         type: selectedOccurrence.type,
         tags: selectedOccurrence.tags,
         status: selectedOccurrence.status,
+        createdBy: selectedOccurrence.createdBy,
         occurrences: allOccurrencesForEvent,
     };
     setEditingEvent(fullEvent);
@@ -332,7 +345,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
       <div className="grid grid-cols-7 border-t border-b text-center text-sm font-semibold text-muted-foreground">
         {weekDayNames.map(day => <div key={day} className="py-2">{day}</div>)}
       </div>
-      <div className="grid grid-cols-7 grid-rows-6 flex-1 gap-px bg-border">
+      <div className="grid grid-cols-7 grid-rows-6 flex-1 gap-px bg-border" data-tour="calendar-grid">
         {calendarDays.map((day) => {
           const dateKey = format(day, 'yyyy-MM-dd');
           const dayEvents = eventsByDate.get(dateKey) || [];
@@ -427,6 +440,40 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
     );
   };
 
+  const FilterPanel = () => (
+    <div className="space-y-4">
+      <div>
+        <h4 className="font-semibold mb-2">Venues</h4>
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+          {venues.map((v) => (
+            <div key={v.id} className="flex items-center space-x-2">
+              <Checkbox id={`venue-${v.id}`} checked={selectedVenues.includes(v.id)} onCheckedChange={() => handleVenueToggle(v.id)} />
+              <span
+                className="inline-block h-3.5 w-3.5 rounded-full border border-border"
+                aria-hidden="true"
+                style={{ backgroundColor: v.color }}
+                title={`${v.name} color`}
+              />
+              <Label htmlFor={`venue-${v.id}`} className="cursor-pointer">{v.name}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+      <Separator />
+      <div>
+        <h4 className="font-semibold mb-2">Event Types</h4>
+        <div className="space-y-2">
+          {eventTypes.map((type) => (
+            <div key={type} className="flex items-center space-x-2">
+              <Checkbox id={`type-${type}`} checked={selectedTypes.includes(type)} onCheckedChange={() => handleTypeToggle(type)} />
+              <Label htmlFor={`type-${type}`} className="cursor-pointer capitalize">{toTitleCase(type.replace('-', ' '))}</Label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-full lg:max-w-none">
       <div className="lg:col-span-2">
@@ -445,60 +492,41 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
             )}
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="bg-accent text-accent-foreground hover:bg-accent/90"><FilterIcon className="mr-2 h-4 w-4" /> Filter</Button>
+                <Button variant="outline" className="bg-accent text-accent-foreground hover:bg-accent/90" data-tour="filter"><FilterIcon className="mr-2 h-4 w-4" /> Filter</Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-4">
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold mb-2">Venues</h4>
-                    <div className="space-y-2">
-                      {venues.map(venue => (
-                        <div key={venue.id} className="flex items-center space-x-2">
-                          <Checkbox id={`venue-${venue.id}`} checked={selectedVenues.includes(venue.id)} onCheckedChange={() => handleVenueToggle(venue.id)} />
-                          <Label htmlFor={`venue-${venue.id}`} className="flex items-center gap-2 cursor-pointer">
-                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: venue.color }}></span>
-                            {venue.name}
-                          </Label>
-                        </div>
-                      ))}
-                    </div>
+              {isMobile ? (
+                <PopoverContent align="center" sideOffset={8} className="p-0 bg-transparent border-0 shadow-none w-auto">
+                  <div className="fixed left-1/2 top-1/2 z-[60] w-[90vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-md border bg-popover p-4 text-popover-foreground shadow-md max-h-[80vh] overflow-y-auto">
+                    <FilterPanel />
                   </div>
-                  <Separator />
-                  <div>
-                    <h4 className="font-semibold mb-2">Event Types</h4>
-                    <div className="space-y-2">
-                      {eventTypes.map(type => (
-                        <div key={type} className="flex items-center space-x-2">
-                          <Checkbox id={`type-${type}`} checked={selectedTypes.includes(type)} onCheckedChange={() => handleTypeToggle(type)} />
-                          <Label htmlFor={`type-${type}`} className="cursor-pointer capitalize">{toTitleCase(type.replace('-', ' '))}</Label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {allTags.length > 0 && (
-                    <>
-                        <Separator />
-                        <div>
-                        <h4 className="font-semibold mb-2">Tags</h4>
-                        <div className="space-y-2">
-                          {allTags.map(tag => (
-                            <div key={tag} className="flex items-center space-x-2">
-                              <Checkbox id={`tag-${tag}`} checked={selectedTags.includes(tag)} onCheckedChange={() => handleTagToggle(tag)} />
-                              <Label htmlFor={`tag-${tag}`} className="cursor-pointer capitalize">{toTitleCase(tag.replace('-', ' '))}</Label>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </PopoverContent>
+                </PopoverContent>
+              ) : (
+                <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-72 p-4 max-h-[80vh] overflow-y-auto">
+                  <FilterPanel />
+                </PopoverContent>
+              )}
             </Popover>
           </div>
         </div>
+        {isVenueRep && !venueRepOnboardingCompleted && (
+          <Card className="mb-4 border-primary/30 bg-primary/5">
+            <CardHeader className="py-3">
+              <CardTitle className="text-base">Welcome! Let's get you started</CardTitle>
+              <CardDescription>As a venue rep, you can add and update events for your assigned venues.</CardDescription>
+            </CardHeader>
+            <CardFooter className="pt-0">
+              <Button size="sm" onClick={() => setCreateEventOpen(true)} data-tour="add-event">
+                <Plus className="mr-2 h-4 w-4" /> Add your first event
+              </Button>
+              <Button variant="ghost" size="sm" className="ml-2" onClick={() => { setOnboardingStep(1); setOnboardingOpen(true); }}>
+                Learn more
+              </Button>
+            </CardFooter>
+          </Card>
+        )}
         <div className="space-y-4">
           {selectedDayEvents.length > 0 ? (
-            selectedDayEvents.map(event => {
+            selectedDayEvents.map((event, idx) => {
               const isSelected = selectedEventId === event.id;
               return (
                 <Card 
@@ -508,6 +536,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
                     isSelected ? "z-10 shadow-lg" : ""
                   )}
                   style={{ borderLeft: `4px solid ${event.venue?.color || 'hsl(var(--primary))'}` }}
+                  data-tour={idx === 0 ? 'event-card' : undefined}
                 >
                   <div onClick={() => handleCardClick(event.id)} className="cursor-pointer flex-grow">
                     <CardHeader>
@@ -602,6 +631,133 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
         onClose={() => setReviewModalOpen(false)}
         event={selectedEventForReview}
       />
+      <Dialog open={isOnboardingOpen} onOpenChange={setOnboardingOpen}>
+        <DialogContent className="w-[95vw] sm:w-auto sm:max-w-[640px] max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="font-headline">Welcome, Venue Representative</DialogTitle>
+            <DialogDescription>
+              A quick walkthrough to help you add events and understand approvals.
+            </DialogDescription>
+          </DialogHeader>
+          {onboardingStep === 1 && (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p><strong>You now have access to add events to the calendar.</strong></p>
+                <p>When you submit an event, an admin will review and approve it before it appears publicly.</p>
+                <p>Keeping theatre events up to date can be a collective community effort — your submissions help the whole scene.</p>
+                {venueRepPolicyAccepted ? (
+                  <div className="rounded-md border border-green-200 bg-green-50 text-foreground p-3">
+                    You have already acknowledged the Venue Rep Policy. You can review it again any time, or continue the walkthrough.
+                  </div>
+                ) : (
+                  <p>
+                    <strong className="text-foreground">Policy required:</strong> You must review and accept the
+                    <Link href={`/policies/venue-reps?returnTo=${encodeURIComponent(pathname + '?onboarding=venue-rep')}`} className="underline ml-1">Venue Rep Policy</Link>
+                    before continuing the walkthrough.
+                  </p>
+                )}
+              </div>
+              <div className="sticky bottom-0 -mx-4 sm:-mx-6 mt-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex gap-2 flex-wrap">
+                    <Button asChild variant="outline" className="w-full sm:w-auto">
+                      <Link href={`/policies/venue-reps?returnTo=${encodeURIComponent(pathname + '?onboarding=venue-rep')}`}>{venueRepPolicyAccepted ? 'Review policy' : 'Review and accept policy'}</Link>
+                    </Button>
+                    <Button className="w-full sm:w-auto" onClick={() => setOnboardingStep(2)} disabled={!venueRepPolicyAccepted}>Next</Button>
+                  </div>
+                  <Button variant="link" className="text-muted-foreground px-0 h-auto" onClick={async () => { await setHasSeenVenueRepIntro?.(); setOnboardingOpen(false); }}>Skip walkthrough</Button>
+                </div>
+              </div>
+            </div>
+          )}
+          {onboardingStep === 2 && (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p><strong>How to add an event</strong></p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Click the “Add Event” button.</li>
+                  <li>Choose the venue you represent.</li>
+                  <li>Enter the title, description, and optional website URL.</li>
+                  <li>Select the type and add tags if helpful.</li>
+                  <li>Add one or more dates and times, then submit.</li>
+                </ul>
+                <p>After submission, you can edit details later; admins approve before publishing.</p>
+              </div>
+              <div className="sticky bottom-0 -mx-4 sm:-mx-6 mt-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOnboardingStep(1)}>Back</Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button className="w-full sm:w-auto" onClick={() => setOnboardingStep(3)}>Try a demo</Button>
+                  </div>
+                  <Button variant="link" className="text-muted-foreground px-0 h-auto" onClick={async () => { await setHasSeenVenueRepIntro?.(); setOnboardingOpen(false); }}>Skip walkthrough</Button>
+                </div>
+              </div>
+            </div>
+          )}
+          {onboardingStep === 3 && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">This is a demo form for practice only. Submitting will not save any data.</p>
+              <EventEditorForm
+                venues={venues}
+                demoMode
+                submitLabel="Submit Demo Event"
+                initialData={{
+                  title: 'Demo Event',
+                  description: 'A quick practice event. This will not be saved.',
+                  venue: '',
+                  occurrences: [{ date: '', time: '' }],
+                  tags: [],
+                } as any}
+                onSuccess={() => {
+                  setOnboardingStep(4);
+                }}
+              />
+              <div className="sticky bottom-0 -mx-4 sm:-mx-6 mt-2 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOnboardingStep(2)}>Back</Button>
+                  <Button variant="link" className="text-muted-foreground px-0 h-auto" onClick={async () => { await setHasSeenVenueRepIntro?.(); setOnboardingOpen(false); }}>Skip walkthrough</Button>
+                </div>
+              </div>
+            </div>
+          )}
+          {onboardingStep === 4 && (
+            <div className="space-y-4 text-sm text-muted-foreground">
+              <p><strong>Nice! You're ready to add real events.</strong></p>
+              <p>Your demo helped you learn the fields. Now create your first event for one of your venues.</p>
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={async () => { await setVenueRepOnboardingCompleted?.(); setOnboardingOpen(false); }}>Finish</Button>
+                <Button className="w-full sm:w-auto" onClick={async () => { await setVenueRepOnboardingCompleted?.(); setOnboardingOpen(false); setCreateEventOpen(true); }}>Add a real event</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isCreateEventOpen} onOpenChange={setCreateEventOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+          <DialogHeader>
+            <DialogTitle className="font-headline">Add Event</DialogTitle>
+            <DialogDescription>Fill in the details below to create a new event.</DialogDescription>
+          </DialogHeader>
+          <EventEditorForm
+            venues={venues}
+            onSuccess={async () => {
+              setCreateEventOpen(false);
+              await setVenueRepOnboardingCompleted?.();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+      {!isAdmin && isVenueRep && (
+        <Button
+          className="fixed bottom-20 right-6 z-50 h-14 w-14 rounded-full shadow-lg md:bottom-6 md:right-6"
+          size="icon"
+          onClick={() => setCreateEventOpen(true)}
+          data-tour="add-event"
+        >
+          <Plus className="h-6 w-6" />
+          <span className="sr-only">Add Event</span>
+        </Button>
+      )}
       {isAdmin && <AddEventButton venues={venues} />}
     </div>
   );

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { collection, addDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { db } from '@/lib/firebase';
+import { getClientDb } from '@/lib/firebase';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import SignInPromptModal from '@/components/SignInPromptModal';
@@ -43,7 +43,7 @@ export default function SuggestIdeaForm({ closeModal }: SuggestIdeaFormProps) {
       return;
     }
     try {
-      await addDoc(collection(db, 'ideas'), {
+      await addDoc(collection(getClientDb(), 'ideas'), {
         ...formData,
         userId: user.uid,
         userName: user.displayName,

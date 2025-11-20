@@ -33,13 +33,13 @@ const categoryOptions = [
 const reviewFormSchema = z.object({
   overallExperience: z.string().min(1, 'Please select your overall experience.'),
   specialMomentsText: z.string().min(10, 'Please share at least a few words.'),
-  recommendations: z.array(z.string()).optional(),
+  recommendations: z.array(z.string()).default([]),
   showHeartText: z.string().min(10, 'Please share at least a few words.'),
   communityImpactText: z.string().min(10, 'Please share at least a few words.'),
   ticketInfo: z.string().min(5, 'Please provide some detail on your ticket.'),
   valueConsiderationText: z.string().min(10, 'Please share at least a few words.'),
   timeWellSpentText: z.string().min(10, 'Please share at least a few words.'),
-  disclosureText: z.string().optional(),
+  disclosureText: z.string().default(''),
 });
 
 type ReviewFormValues = z.infer<typeof reviewFormSchema>;
@@ -77,6 +77,14 @@ export function ReviewForm({ event, onSuccess }: ReviewFormProps) {
         }
 
         startTransition(async () => {
+            // Fetch Firebase ID token to authenticate and enforce email verification on the server
+            let idToken: string | undefined = undefined;
+            try {
+                idToken = (await user?.getIdToken?.()) || undefined;
+            } catch (_) {
+                // Non-fatal; server will attempt header-based auth as a fallback
+            }
+
             const result = await submitReviewAction({
                 ...data,
                 showId: event.id,
@@ -84,7 +92,7 @@ export function ReviewForm({ event, onSuccess }: ReviewFormProps) {
                 performanceDate: event.date,
                 reviewerId: user.uid,
                 reviewerName: user.displayName || 'Anonymous Reviewer',
-            });
+            }, idToken);
 
             if (result.success) {
                 toast({

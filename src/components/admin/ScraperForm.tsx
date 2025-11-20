@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useTransition, useState, useRef } from 'react';
+import { useTransition, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -15,6 +14,8 @@ import type { Venue } from '@/lib/types';
 import type { ScrapeEventDetailsOutput } from '@/ai/flows/scrape-event-details';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { EventEditorForm } from '@/components/admin/EventEditorForm';
+import { useAuth } from '@/components/auth/AuthProvider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 
 const formSchema = z.object({
@@ -22,19 +23,21 @@ const formSchema = z.object({
   screenshot: z.any()
     .refine((files) => files?.length == 1, "A screenshot image is required.")
     .refine((files) => files?.[0]?.type.startsWith("image/"), "Only image files are accepted."),
+  model: z.string().optional(),
 });
 
 export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?: () => void }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
   
   const [prefillData, setPrefillData] = useState<(ScrapeEventDetailsOutput & { sourceUrl?: string }) | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileInputEl, setFileInputEl] = useState<HTMLInputElement | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: { url: '' },
+    defaultValues: { url: '', model: '' },
   });
 
   const screenshotFile = form.watch('screenshot');
@@ -50,10 +53,38 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
     });
 
     startTransition(async () => {
-      const result = await scrapeEventAction(values.url || undefined, screenshotDataUri);
+      const chosenModel = values.model && values.model.trim() ? values.model.trim() : undefined;
+      const result = await scrapeEventAction(values.url || undefined, screenshotDataUri, chosenModel);
       if (result.success && result.data) {
         setPrefillData(result.data);
         setIsEditorOpen(true);
+
+        // Admin-only: show how it was processed and any API cost/usage
+        if (isAdmin && result.meta) {
+          const processedBy = result.meta.processedBy === 'ai'
+            ? (result.meta.model ? `AI (${result.meta.model})` : 'AI')
+            : 'HTML extraction';
+          let description = `Processed via ${processedBy}.`;
+          if (result.meta.processedBy === 'ai') {
+            const u = result.meta.usage || {};
+            const parts: string[] = [];
+            if (typeof u.inputTokens === 'number') parts.push(`input ${u.inputTokens}`);
+            if (typeof u.outputTokens === 'number') parts.push(`output ${u.outputTokens}`);
+            if (typeof u.totalTokens === 'number') parts.push(`total ${u.totalTokens}`);
+            const hasUsage = parts.length > 0;
+            if (hasUsage) description += ` Tokens: ${parts.join(', ')}.`;
+            if (typeof result.meta.costUsd === 'number') {
+              description += ` Estimated cost: $${result.meta.costUsd.toFixed(6)}.`;
+            } else if (hasUsage) {
+              description += ' Estimated cost unavailable (add pricing env vars).';
+            } else {
+              description += ' Token usage unavailable; cannot estimate cost.';
+            }
+          } else {
+            description += ' No API cost.';
+          }
+          toast({ title: 'Processing details', description });
+        }
       } else {
         toast({
           variant: 'destructive',
@@ -85,6 +116,13 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
     }
   };
 
+  const handleSkip = () => {
+    // Open the editor without scraping. Use the URL (if provided) to prefill the source field.
+    const sourceUrl = form.getValues('url') || '';
+    setPrefillData({ sourceUrl });
+    setIsEditorOpen(true);
+  };
+
 
   return (
     <>
@@ -103,11 +141,12 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
                 </FormItem>
             )}
             />
+            
             <FormField
             control={form.control}
             name="screenshot"
             render={({ field }) => (
-                <FormItem>
+              <FormItem>
                 <FormLabel>Screenshot</FormLabel>
                     <div 
                       className="relative flex flex-col items-center justify-center w-full p-6 border-2 border-dashed rounded-lg text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:border-primary/50"
@@ -121,7 +160,7 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
                             className="sr-only"
                             ref={(e) => {
                                 field.ref(e);
-                                if(fileInputRef) fileInputRef.current = e;
+                                setFileInputEl(e);
                             }}
                             onChange={(e) => field.onChange(e.target.files)}
                           />
@@ -143,7 +182,7 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
                                 type="button" 
                                 variant="outline" 
                                 className="pointer-events-auto"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={() => fileInputEl?.click()}
                             >
                                 Upload a File
                             </Button>
@@ -159,9 +198,45 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
                 </FormItem>
             )}
             />
-            <Button type="submit" disabled={isPending || !screenshotFile}>
-            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Scrape and Prefill Form
+            <div className="mt-2 flex items-center gap-3">
+              <FormField
+                control={form.control}
+                name="model"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="sr-only">Model (Optional)</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                      <SelectTrigger className="w-[260px]">
+                        <SelectValue placeholder="Use default model" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="googleai/gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                      <SelectItem value="googleai/gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
+                      <SelectItem value="openai/gpt-4o-mini">OpenAI GPT-4o mini</SelectItem>
+                      <SelectItem value="openai/gpt-4o">OpenAI GPT-4o</SelectItem>
+                      <SelectItem value="openai/gpt-5-nano">OpenAI GPT-5 nano</SelectItem>
+                      <SelectItem value="openai/gpt-5-mini">OpenAI GPT-5 mini</SelectItem>
+                      <SelectItem value="openai/gpt-5">OpenAI GPT-5</SelectItem>
+                    </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button type="submit" disabled={isPending || !screenshotFile}>
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Scrape and Prefill Form
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              className="ml-2"
+              onClick={handleSkip}
+            >
+              Skip image scrape
             </Button>
         </form>
         </Form>
@@ -170,7 +245,7 @@ export function ScraperForm({ venues, onSuccess }: { venues: Venue[], onSuccess?
                 <DialogHeader>
                     <DialogTitle>Review and Add Event</DialogTitle>
                     <DialogDescription>
-                        The AI has pre-filled the form with details from the screenshot. Please review, correct, and complete the information before adding the event.
+                        Review and complete the event details. If you used image scraping, some fields may be pre-filled; otherwise, enter the information manually.
                     </DialogDescription>
                 </DialogHeader>
                 {prefillData && (

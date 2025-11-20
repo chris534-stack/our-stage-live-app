@@ -121,6 +121,7 @@ export function GalleryViewer({ isOpen, onClose, images, startIndex = 0, userNam
                                         src={url}
                                         alt={`Gallery image ${index + 1}`}
                                         fill
+                                        sizes="100vw"
                                         className="object-contain"
                                         data-ai-hint="gallery photo"
                                         unoptimized

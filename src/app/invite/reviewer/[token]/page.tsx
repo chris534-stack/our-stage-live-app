@@ -4,25 +4,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GoogleAuthProvider, signInWithPopup, getIdToken, createUserWithEmailAndPassword, type Auth } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { getIdToken } from 'firebase/auth';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { Loader2, UserCheck, Mail, Calendar, AlertCircle } from 'lucide-react';
-import Image from 'next/image';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import type { ReviewerInvitation } from '@/lib/types';
-
-const GoogleIcon = (props: { className?: string }) => (
-  <Image 
-    src="/google-logo.png" 
-    alt="Google logo" 
-    width={24} 
-    height={24}
-    className={props.className}
-    data-ai-hint="google logo"
-  />
-);
+import SocialSignInButtons from '@/components/auth/SocialSignInButtons';
+import EmailAuthForm from '@/components/auth/EmailAuthForm';
 
 export default function ReviewerInvitePage() {
   const params = useParams();
@@ -34,9 +21,7 @@ export default function ReviewerInvitePage() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (token) {
@@ -67,47 +52,6 @@ export default function ReviewerInvitePage() {
     }
   };
 
-  const handleSignIn = async () => {
-    if (!auth) {
-      setError('Authentication service is not available. Please try again later.');
-      return;
-    }
-    try {
-      setAccepting(true);
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // The useEffect will handle accepting the invitation once user is signed in
-    } catch (error) {
-      console.error('Error signing in:', error);
-      setError('Failed to sign in with Google. Please try again.');
-      setAccepting(false);
-    }
-  };
-
-  const handleSignUpWithEmail = async () => {
-    if (!email || password.length < 6) {
-        setError("Please provide a valid email and a password of at least 6 characters.");
-        return;
-    }
-    if (!auth) {
-      setError('Authentication service is not available. Please try again later.');
-      return;
-    }
-    try {
-      setAccepting(true);
-      await createUserWithEmailAndPassword(auth, email, password);
-      // The useEffect hook will handle accepting the invitation once user is created and signed in
-    } catch (error: any) { // Using 'any' for Firebase auth errors
-      console.error('Error signing up:', error);
-      if (error.code === 'auth/email-already-in-use') {
-          setError('This email is already in use. Please sign in or use a different email.');
-      } else {
-          setError('Failed to create account. Please try again.');
-      }
-      setAccepting(false);
-    }
-  };
-
   const acceptInvitation = async () => {
     if (!user) return;
 
@@ -130,8 +74,8 @@ export default function ReviewerInvitePage() {
 
       const data = await response.json();
       
-      // Success! Redirect to profile or dashboard
-      router.push(data.redirectTo || '/profile');
+      // Success! Redirect home by default; profile setup is optional
+      router.push(data.redirectTo || '/');
     } catch (err) {
       console.error('Error accepting invitation:', err);
       setError(err instanceof Error ? err.message : 'Failed to accept invitation');
@@ -277,59 +221,36 @@ export default function ReviewerInvitePage() {
                 </Button>
               </div>
             ) : (
-              <>
-                <Button 
-                  onClick={handleSignIn} 
-                  disabled={accepting}
-                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+              <div className="space-y-4">
+                <SocialSignInButtons
+                  onError={(msg) => setError(msg)}
+                  onSignedIn={() => { /* user state updates via AuthProvider */ }}
                   size="lg"
-                >
-                  {accepting && !password ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing In...
-                    </> 
-                  ) : (
-                    <>
-                      <GoogleIcon className="mr-2 h-4 w-4" />
-                      Sign in with Google to Accept
-                    </>
-                  )}
-                </Button>
-
+                  fullWidth
+                  showGoogle
+                  showApple={false}
+                  showMicrosoft={false}
+                  showFacebook={false}
+                />
                 <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
+                  <div className="absolute inset-0 flex items-center" aria-hidden>
                     <span className="w-full border-t" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">
-                      Or create an account with
-                    </span>
+                    <span className="bg-card px-2 text-muted-foreground">Or use your email</span>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password" placeholder="6+ characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
-                </div>
-                <Button onClick={handleSignUpWithEmail} disabled={accepting || !email || password.length < 6} className="w-full">
-                  {accepting && password ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Account...</>
-                  ) : (
-                      'Create Account & Accept'
-                  )}
-                </Button>
-              </>
+                <EmailAuthForm defaultEmail={email} onError={(msg) => setError(msg)} onSignedIn={() => { /* AuthProvider updates */ }} />
+              </div>
             )}
           </div>
 
           <p className="text-xs text-center text-muted-foreground">
             By accepting this invitation, you agree to write thoughtful, honest reviews 
             that help our community discover great theatre.
+          </p>
+          <p className="text-xs text-center text-muted-foreground">
+            Note: Creating a public profile is optional. You can set one up later from the profile icon.
           </p>
         </CardContent>
       </Card>

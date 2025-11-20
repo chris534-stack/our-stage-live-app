@@ -1,13 +1,10 @@
-
-
 'use client';
-
 import type { UserProfile, Review } from '@/lib/types';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { useState, useEffect, useTransition, useRef } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Edit, Mail, Shield, Drama, Wrench, Users, Camera, CalendarClock, GalleryVerticalEnd, Upload, Loader2, Shuffle, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Edit, Mail, Shield, Drama, Wrench, Users, Camera, CalendarClock, GalleryVerticalEnd, Upload, Loader2, Shuffle, Trash2, ShieldAlert, ShieldCheck, LogOut } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -19,10 +16,13 @@ import { MultiPhotoUploader } from '@/components/profile/MultiPhotoUploader';
 import { GalleryViewer } from './GalleryViewer';
 import { OptimizedGallery } from './OptimizedGallery';
 import { useToast } from '@/hooks/use-toast';
-import { updateGalleryOrderAction, deleteProfilePhotoAction, setProfilePhotoAction, setCoverPhotoAction, uploadProfilePhotoAction } from '@/lib/actions';
+import { updateGalleryOrderAction, setProfilePhotoAction, setCoverPhotoAction } from '@/lib/actions';
 import { cn } from '@/lib/utils';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { sendEmailVerification, signOut } from 'firebase/auth';
+import { getClientAuth } from '@/lib/firebase';
+import { useRouter } from 'next/navigation';
 
 
 function ProfileStat({ icon: Icon, label, value }: { icon: React.ElementType, label: string, value: string | undefined | null }) {
@@ -78,8 +78,10 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
 
     const [isReorderPending, startReorderTransition] = useTransition();
     const [isUploadPending, startUploadTransition] = useTransition();
+    const [isSignOutPending, startSignOutTransition] = useTransition();
     const [showUploadModal, setShowUploadModal] = useState(false);
     const { toast } = useToast();
+    const router = useRouter();
     
     const [isReordering, setIsReordering] = useState(false);
     const [orderedGalleryUrls, setOrderedGalleryUrls] = useState<string[]>([]);
@@ -118,6 +120,8 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     }, [profile.communityStartDate]);
 
     const isOwner = user?.uid === profile.userId;
+    const hasCoverPhoto = !!profile.coverPhotoUrl?.trim();
+    const shouldShowBannerShell = hasCoverPhoto || isOwner;
 
     const roleIcons = {
         Performer: Drama,
@@ -137,14 +141,30 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     };
     
     const handlePhotoUploadComplete = () => {
-        // This function is intentionally left empty.
-        // Server actions use `revalidatePath`, and the Next.js router
-        // will automatically handle refreshing the page with the new data.
-        // This avoids client-side state mismatches.
+        // Trigger a router refresh to reload the server-rendered data with updated photos
+        // This ensures the gallery shows the newly uploaded photos immediately
+        try {
+            router.refresh();
+        } catch (error) {
+            console.warn('Failed to refresh router, manual refresh may be needed:', error);
+        }
     };
     
     const handleHeaderUpload = () => {
         setShowUploadModal(true);
+    };
+
+    const handleSignOut = () => {
+        startSignOutTransition(async () => {
+            try {
+                await signOut(getClientAuth());
+                toast({ title: 'Signed out', description: 'You have been signed out.' });
+                router.push('/');
+            } catch (err) {
+                console.error('Sign out failed', err);
+                toast({ variant: 'destructive', title: 'Sign out failed', description: 'Please try again.' });
+            }
+        });
     };
 
     const handleOpenGallery = (index: number) => {
@@ -158,7 +178,9 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
 
     const handleSaveReorder = () => {
         startReorderTransition(async () => {
-            const result = await updateGalleryOrderAction(profile.userId, orderedGalleryUrls);
+            // Include Firebase ID token so the server action can authenticate the requester
+            const idToken = await user?.getIdToken?.();
+            const result = await updateGalleryOrderAction(profile.userId, orderedGalleryUrls, idToken);
             if (result.success) {
                 toast({ title: 'Success', description: 'Your gallery order has been saved.' });
                 setIsReordering(false);
@@ -202,6 +224,8 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     }
     
     const handleDeleteClick = (url: string) => {
+        // Provide immediate feedback that the click was received
+        toast({ title: 'Delete photo', description: 'Preparing delete confirmation…' });
         setPhotoToDelete(url);
         setIsAlertOpen(true);
     };
@@ -210,11 +234,49 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         if (!photoToDelete) return;
         
         startDeleteTransition(async () => {
-            const result = await deleteProfilePhotoAction(profile.userId, photoToDelete);
-            if (result.success) {
-                toast({ title: "Photo Deleted", description: "The photo has been removed from the gallery." });
-            } else {
-                toast({ variant: 'destructive', title: "Deletion Failed", description: result.message });
+            try {
+                // Get Firebase ID token for authentication
+                const idToken = await user?.getIdToken?.();
+
+                // Call the API route instead of server action directly
+                const response = await fetch('/api/delete-photo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: profile.userId,
+                        photoUrl: photoToDelete,
+                        idToken: idToken || undefined,
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Show the server's message so users are informed if storage deletion was skipped
+                    // but the image was still removed from their gallery (soft delete).
+                    toast({ title: "Photo Deleted", description: result.message || "The photo has been removed from the gallery." });
+                    // Immediately update local state so UI reflects the change without a full reload
+                    setOrderedGalleryUrls(prev => prev.filter(u => u !== photoToDelete));
+                    setProfile(prev => ({
+                        ...prev,
+                        galleryImageUrls: (prev.galleryImageUrls || []).filter(u => u !== photoToDelete),
+                        coverPhotoUrl: prev.coverPhotoUrl === photoToDelete ? '' : prev.coverPhotoUrl,
+                        photoURL: prev.photoURL === photoToDelete ? prev.photoURL : prev.photoURL,
+                    }));
+                    // Refresh route to re-fetch any server-rendered data and revalidated caches
+                    try { router.refresh(); } catch {}
+                } else {
+                    toast({ variant: 'destructive', title: "Deletion Failed", description: result.message });
+                }
+            } catch (error) {
+                console.error('Photo deletion error:', error);
+                toast({
+                    variant: 'destructive',
+                    title: "Deletion Failed",
+                    description: "An unexpected error occurred while deleting the photo."
+                });
             }
             setIsAlertOpen(false);
             setPhotoToDelete(null);
@@ -260,18 +322,60 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                 </div>
             )}
             <div className="w-full pb-16">
-                <div className="h-48 md:h-64 bg-secondary relative">
-                    <Image
-                        src={profile.coverPhotoUrl || "https://placehold.co/1600x400.png"}
-                        alt="Cover photo"
-                        fill
-                        className="object-cover"
-                        data-ai-hint="theatre background"
-                        unoptimized
-                    />
-                </div>
+                {shouldShowBannerShell && (
+                    <div
+                        className={cn(
+                            "relative w-full overflow-hidden",
+                            hasCoverPhoto ? "h-48 md:h-64" : "h-40 md:h-52 bg-muted/20 border-2 border-dashed border-primary/40"
+                        )}
+                    >
+                        {hasCoverPhoto ? (
+                            <Image
+                                src={profile.coverPhotoUrl!}
+                                alt="Cover photo"
+                                fill
+                                sizes="100vw"
+                                className="object-cover"
+                                data-ai-hint="theatre background"
+                                unoptimized
+                            />
+                        ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-4 text-muted-foreground">
+                                <Upload className="h-10 w-10 text-primary" />
+                                <div className="space-y-1">
+                                    <p className="font-medium text-foreground">Add a banner image</p>
+                                    <p className="text-sm text-muted-foreground/80">
+                                        Upload a wide photo to give your profile some personality.
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="secondary"
+                                    onClick={handleHeaderUpload}
+                                    disabled={isUploadPending || !canUpload}
+                                >
+                                    {isUploadPending ? (
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    ) : (
+                                        <Upload className="mr-2 h-4 w-4" />
+                                    )}
+                                    Upload banner
+                                </Button>
+                                {!canUpload && (
+                                    <p className="text-xs text-muted-foreground/70">
+                                        Your gallery is full. Remove a photo to upload a banner.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
 
-                <div className="container mx-auto -mt-20 px-4 sm:px-6 lg:px-8">
+                <div
+                    className={cn(
+                        "container mx-auto px-4 sm:px-6 lg:px-8",
+                        shouldShowBannerShell ? "-mt-20" : "mt-6"
+                    )}
+                >
                     <div className="flex flex-col md:flex-row md:items-end md:gap-8">
                         <div className="flex-shrink-0">
                             <Avatar className="h-36 w-36 border-4 border-background ring-2 ring-primary">
@@ -295,11 +399,17 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                     <Button onClick={() => setIsSheetOpen(true)}>
                                         <Edit className="mr-2 h-4 w-4" /> Edit Profile
                                     </Button>
+                                )}{isOwner && (
+                                    <Button variant="outline" onClick={handleSignOut} disabled={isSignOutPending}>
+                                        {isSignOutPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                                        {isSignOutPending ? 'Signing out...' : 'Sign Out'}
+                                    </Button>
                                 )}
                                 {isOwner && isAdmin && (
                                     <Button asChild variant="outline">
                                         <Link href="/admin">
-                                            <Shield className="mr-2 h-4 w-4" /> Admin Dashboard
+                                            <Shield className="mr-2 h-4 w-4" />
+                                            <span className="hidden sm:inline">Admin Dashboard</span>
                                         </Link>
                                     </Button>
                                 )}
@@ -309,6 +419,33 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
 
                     <div className="mt-12">
                         <AdminAuthStatusAlert profile={profile} isAdmin={isAdmin} />
+                        {/* Email verification notice for unverified email/password users */}
+                        {user && user.email && !user.emailVerified && (
+                            <Alert className="mt-4">
+                                <ShieldAlert className="h-4 w-4" />
+                                <AlertTitle>Email verification required</AlertTitle>
+                                <AlertDescription>
+                                    Your email address ({user.email}) is not verified yet. Some features may be limited until you verify your email.
+                                    <div className="mt-3">
+                                        <Button
+                                            size="sm"
+                                            onClick={async () => {
+                                                try {
+                                                    if (!user) return;
+                                                    await sendEmailVerification(user);
+                                                    toast({ title: 'Verification email sent', description: 'Check your inbox and follow the link to verify your email.' });
+                                                } catch (err) {
+                                                    console.error('Failed to send verification email', err);
+                                                    toast({ variant: 'destructive', title: 'Failed to send verification email', description: 'Please try again in a moment.' });
+                                                }
+                                            }}
+                                        >
+                                            Resend verification email
+                                        </Button>
+                                    </div>
+                                </AlertDescription>
+                            </Alert>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -401,6 +538,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                             onReorderClick={handleReorderClick}
                                             onDeleteClick={handleDeleteClick}
                                             isOwner={isOwner}
+                                            isAdmin={isAdmin}
                                         />
                                     )}
                                 </CardContent>
@@ -410,7 +548,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                 {initialReviews.length > 0 ? (
                                     <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-1 md:grid-cols-2 sm:gap-6">
                                         {initialReviews.map(review => (
-                                            <ReviewPreviewCard key={review.id} review={review} />
+                                            <ReviewPreviewCard key={review.id} review={review} titleMode="show" />
                                         ))}
                                     </div>
                                 ) : (
@@ -460,3 +598,4 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         </>
     );
 }
+

@@ -11,8 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -25,46 +23,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { updateVenueAction, deleteVenueAction } from '@/lib/actions';
+import { deleteVenueAction } from '@/lib/actions';
 import { Edit, Trash2 } from 'lucide-react';
+import { VenueEditorForm } from './VenueEditorForm';
+import { getClientAuth } from '@/lib/firebase';
 
 export function VenueCard({ venue }: { venue: Venue }) {
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [isEditOpen, setIsEditOpen] = useState(false);
-  
-  const [formData, setFormData] = useState({
-    name: venue.name,
-    address: venue.address || '',
-    sourceUrl: venue.sourceUrl || '',
-    color: venue.color || '#8D99A6',
-  });
-
-  const handleFieldChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({ ...formData, [e.target.id]: e.target.value });
-  };
-  
-  const handleUpdateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    startTransition(async () => {
-      const result = await updateVenueAction(venue.id, formData);
-      if (result.success) {
-        toast({ title: "Venue Updated", description: result.message });
-        setIsEditOpen(false);
-      } else {
-        toast({ variant: 'destructive', title: "Update Failed", description: result.message });
-      }
-    });
-  };
 
   const handleDelete = () => {
     startTransition(async () => {
-      const result = await deleteVenueAction(venue.id);
-       if (result.success) {
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await deleteVenueAction(venue.id, idToken);
+      if (result.success) {
         toast({ title: 'Venue Deleted', description: result.message });
       } else {
         toast({ variant: 'destructive', title: 'Deletion Failed', description: result.message });
@@ -81,8 +60,14 @@ export function VenueCard({ venue }: { venue: Venue }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-grow">
-         <p className="text-sm text-muted-foreground break-all">
-            {venue.sourceUrl ? <a href={venue.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">{venue.sourceUrl}</a> : 'No source URL'}
+        <p className="text-sm text-muted-foreground break-all">
+          {venue.sourceUrl ? (
+            <a href={venue.sourceUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+              {venue.sourceUrl}
+            </a>
+          ) : (
+            'No source URL'
+          )}
         </p>
       </CardContent>
       <CardFooter className="flex justify-between">
@@ -96,35 +81,7 @@ export function VenueCard({ venue }: { venue: Venue }) {
             <DialogHeader>
               <DialogTitle>Edit {venue.name}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleUpdateSubmit} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Venue Name</Label>
-                <Input id="name" value={formData.name} onChange={handleFieldChange} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input id="address" value={formData.address} onChange={handleFieldChange} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sourceUrl">Source URL (for scraping)</Label>
-                <Input id="sourceUrl" type="url" value={formData.sourceUrl} onChange={handleFieldChange} placeholder="https://example.com/events"/>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="color">Venue Color</Label>
-                <div className="flex items-center gap-4">
-                  <Input id="color" type="color" value={formData.color} onChange={handleFieldChange} className="p-1 h-10 w-16"/>
-                  <div style={{ backgroundColor: formData.color }} className="h-10 w-full rounded-md border" />
-                </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild>
-                    <Button type="button" variant="ghost">Cancel</Button>
-                </DialogClose>
-                <Button type="submit" disabled={isPending}>
-                  {isPending ? 'Saving...' : 'Save Changes'}
-                </Button>
-              </DialogFooter>
-            </form>
+            <VenueEditorForm venue={venue} onSuccess={() => setIsEditOpen(false)} />
           </DialogContent>
         </Dialog>
 

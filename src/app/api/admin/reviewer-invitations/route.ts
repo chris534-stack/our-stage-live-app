@@ -11,6 +11,27 @@ function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');
 }
 
+function getBaseUrl(request: NextRequest): string {
+  // Prefer explicit env configuration
+  const envBase = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (envBase) return envBase.replace(/\/$/, '');
+
+  // Infer from proxy headers (Vercel, etc.)
+  const headers = request.headers;
+  const forwardedProto = headers.get('x-forwarded-proto');
+  const vercelUrl = headers.get('x-vercel-deployment-url');
+  const forwardedHost = headers.get('x-forwarded-host');
+  const host = forwardedHost || vercelUrl || headers.get('host');
+
+  if (host) {
+    const proto = forwardedProto || (host.includes('localhost') ? 'http' : 'https');
+    return `${proto}://${host}`;
+  }
+
+  // Fallback for local/dev
+  return 'http://localhost:3000';
+}
+
 // GET - Fetch all reviewer invitations
 export async function GET(request: NextRequest) {
   try {
@@ -88,7 +109,8 @@ export async function POST(request: NextRequest) {
     
     // TODO: Send invitation email here
     // For now, we'll return the invitation link
-    const inviteLink = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/invite/reviewer/${token}`;
+    const baseUrl = getBaseUrl(request);
+    const inviteLink = `${baseUrl}/invite/reviewer/${token}`;
 
     return NextResponse.json({ 
       success: true, 

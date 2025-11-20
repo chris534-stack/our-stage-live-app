@@ -36,10 +36,19 @@ import { updateEventStatusAction, deleteEventAction } from '@/lib/actions';
 import { useTransition, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { toTitleCase } from '@/lib/utils';
+import { toTitleCase, truncateText } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import type { EventWithCreator } from '@/lib/data';
 import { EventEditorModal } from './EventEditorModal';
+import { getClientAuth } from '@/lib/firebase';
 
 type EventWithVenue = Event & { venue?: Venue };
+type EventWithVenueAndCreator = EventWithVenue & EventWithCreator;
 
 function formatFirstOccurrence(event: Event): string {
     if (!event.occurrences || event.occurrences.length === 0) {
@@ -57,7 +66,7 @@ function formatFirstOccurrence(event: Event): string {
     return `${datePart}${timePart}`;
 }
 
-export function EventTable({ events, venues }: { events: EventWithVenue[], venues: Venue[] }) {
+export function EventTable({ events, venues }: { events: EventWithVenueAndCreator[], venues: Venue[] }) {
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const [isAlertOpen, setIsAlertOpen] = useState(false);
@@ -66,7 +75,13 @@ export function EventTable({ events, venues }: { events: EventWithVenue[], venue
 
   const handleStatusUpdate = (eventId: string, status: 'approved' | 'denied') => {
     startTransition(async () => {
-      const result = await updateEventStatusAction(eventId, status);
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await updateEventStatusAction(eventId, status, idToken);
       if (result.success) {
         toast({ title: 'Success', description: result.message });
       } else {
@@ -83,7 +98,13 @@ export function EventTable({ events, venues }: { events: EventWithVenue[], venue
     setSelectedEventId(null);
     
     startTransition(async () => {
-      const result = await deleteEventAction(eventIdToDelete);
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await deleteEventAction(eventIdToDelete, idToken);
       if (result.success) {
         toast({ title: 'Success', description: result.message });
       } else {
@@ -131,6 +152,7 @@ export function EventTable({ events, venues }: { events: EventWithVenue[], venue
                 <TableHead>Venue</TableHead>
                 <TableHead>Performances</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Creator</TableHead>
                 <TableHead className="text-right w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -141,6 +163,25 @@ export function EventTable({ events, venues }: { events: EventWithVenue[], venue
                   <TableCell>{event.venue?.name || 'N/A'}</TableCell>
                   <TableCell>{formatFirstOccurrence(event)}</TableCell>
                   <TableCell>{getStatusBadge(event.status)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              {truncateText(event.createdByName || event.createdByEmail || 'Unknown', 20)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{event.createdByName || event.createdByEmail || 'Unknown'}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      {event.createdByIsVenueRep && (
+                        <Badge variant="outline">Rep</Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -175,7 +216,7 @@ export function EventTable({ events, venues }: { events: EventWithVenue[], venue
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">
+                  <TableCell colSpan={6} className="h-24 text-center">
                     No events found in this category.
                   </TableCell>
                 </TableRow>

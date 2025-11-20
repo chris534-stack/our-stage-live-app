@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb, admin } from '@/lib/firebase-admin';
+import { adminDb, admin, getStorageBucket } from '@/lib/firebase-admin';
+import { randomUUID } from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,17 +15,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check storage bucket configuration
-    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    if (!storageBucket) {
-      console.error('Server configuration error: FIREBASE_STORAGE_BUCKET is not set.');
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Server configuration error: Storage destination not found.' 
-      }, { status: 500 });
-    }
-
-    const bucket = admin.storage().bucket(storageBucket);
+    // Robust bucket resolution
+    const bucket = getStorageBucket();
     
     // Create detailed diagnostic information
     const diagnosticInfo = {
@@ -57,11 +49,16 @@ export async function POST(request: NextRequest) {
       const fileName = `diagnostic-test/${userId}/${Date.now()}-${file.name}`;
       const fileUpload = bucket.file(fileName);
 
-      // Upload with metadata
+      // Upload with metadata and token
+      const token = randomUUID();
       await fileUpload.save(buffer, {
+        resumable: false,
+        validation: 'crc32c',
         metadata: {
           contentType: file.type,
-          customMetadata: {
+          cacheControl: 'public, max-age=31536000, immutable',
+          metadata: {
+            firebaseStorageDownloadTokens: token,
             originalName: file.name,
             originalSize: file.size.toString(),
             diagnosticTest: 'true',
@@ -70,9 +67,9 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Make the file public
-      await fileUpload.makePublic();
-      const publicUrl = fileUpload.publicUrl();
+      const bucketName = fileUpload.bucket.name;
+      const encodedPath = encodeURIComponent(fileUpload.name);
+      const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
 
       // Get file metadata to verify upload
       const [metadata] = await fileUpload.getMetadata();

@@ -5,6 +5,10 @@
 /.pnp
 .pnp.js
 .yarn/install-state.gz
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
 
 # testing
 /coverage
@@ -25,13 +29,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+jest-output.json
+jest-results.json
+tmp-test-logs.txt
 
 # local env files
 .env*.local
 .env
-
-# Firebase App Hosting config with sensitive data
-apphosting.yaml
 
 # vercel
 .vercel
@@ -39,3 +43,11 @@ apphosting.yaml
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# VoxCPM generated audio files
+services/voxcpm/generated_audio/
+*.wav
+
+# Test audio files
+test-audio/
+*.mp3

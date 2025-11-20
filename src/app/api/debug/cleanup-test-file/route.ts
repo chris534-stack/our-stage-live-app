@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { admin } from '@/lib/firebase-admin';
+import { admin, getStorageBucket } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,15 +12,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-    if (!storageBucket) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Server configuration error: Storage destination not found.' 
-      }, { status: 500 });
-    }
-
-    const bucket = admin.storage().bucket(storageBucket);
+    const bucket = getStorageBucket();
     const file = bucket.file(filePath);
 
     // Check if file exists before trying to delete

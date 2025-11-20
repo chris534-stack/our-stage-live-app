@@ -21,11 +21,12 @@ jest.mock('@/lib/firebase-admin', () => ({
   }
 }));
 
-jest.mock('firebase-admin', () => ({
-  auth: () => ({
-    verifyIdToken: jest.fn(),
-  })
-}));
+jest.mock('firebase-admin', () => {
+  const instance = { verifyIdToken: jest.fn() };
+  return {
+    auth: () => instance,
+  };
+});
 
 describe('Reviewer Invitation Pipeline Debug Tests', () => {
   let mockCollection: any;

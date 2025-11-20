@@ -1,5 +1,4 @@
-
-import { getAllReviews, getAllEvents } from '@/lib/data';
+import { getAllReviews, getEventsByStatus } from '@/lib/data';
 import type { Review, Event } from '@/lib/types';
 import { BecomeReviewerCTA } from '@/components/reviews/BecomeReviewerCTA';
 import { ReviewCarousel } from '@/components/reviews/ReviewCarousel';
@@ -18,9 +17,13 @@ function groupReviewsByShow(reviews: Review[], events: Event[]): GroupedReviews 
     const grouped: GroupedReviews = {};
 
     reviews.forEach(review => {
+        // Only include reviews for shows that are in the approved events list
+        if (!eventMap.has(review.showId)) {
+            return;
+        }
         if (!grouped[review.showId]) {
-            const showTitle = eventMap.get(review.showId) || review.showTitle;
-            if (!showTitle) return; // Skip reviews for shows that don't exist
+            const showTitle = eventMap.get(review.showId);
+            if (!showTitle) return; // Safety check
             
             grouped[review.showId] = {
                 showTitle: toTitleCase(showTitle),
@@ -127,16 +130,15 @@ function createThirdMockReview(event: Event): Review {
     };
 }
 
-
 export default async function ReviewsPage() {
     const [allReviews, allEvents] = await Promise.all([
         getAllReviews(),
-        getAllEvents({ includeOccurrences: false }) // Optimize by not fetching occurrences
+        getEventsByStatus('approved')
     ]);
     
     // If no real reviews exist, create a mock one for demonstration.
     if (allReviews.length === 0) {
-        const eventForMock = findEventForMockReview(await getAllEvents());
+        const eventForMock = findEventForMockReview(await getEventsByStatus('approved'));
         if (eventForMock) {
             allReviews.push(createMockReview(eventForMock));
         }
@@ -168,7 +170,7 @@ export default async function ReviewsPage() {
                         const group = groupedReviews[showId];
                         return (
                             <section key={showId}>
-                                <h2 className="text-2xl md:text-3xl font-bold font-headline text-primary mb-4 text-left">
+                                <h2 className="text-2xl md:text-3xl font-bold font-headline text-primary mb-4 text-left px-3 sm:px-0">
                                     Reviews for <span className="text-accent">{group.showTitle}</span>
                                 </h2>
                                 <ReviewCarousel reviews={group.reviews} />

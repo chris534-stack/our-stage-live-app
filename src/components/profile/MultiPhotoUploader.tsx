@@ -64,10 +64,12 @@ export function MultiPhotoUploader({
           return;
         }
 
+        // Allow HEIC/HEIF selection; we'll convert before upload. Preview may not render for HEIC.
+
         // Check file size (5MB limit to prevent crashes)
-        const maxSize = 5 * 1024 * 1024; // Reduced from 10MB to 5MB
+        const maxSize = 10 * 1024 * 1024; // 10MB
         if (file.size > maxSize) {
-          errors.push(`${file.name} is too large (max 5MB)`);
+          errors.push(`${file.name} is too large (max 10MB)`);
           return;
         }
 
@@ -125,7 +127,7 @@ export function MultiPhotoUploader({
   const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp', '.bmp', '.svg']
+      'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp', '.bmp', '.svg', '.heic', '.heif']
     },
     multiple: true,
     maxFiles: maxFilesToSelect,
@@ -161,6 +163,25 @@ export function MultiPhotoUploader({
     });
   };
 
+  // Convert HEIC/HEIF to JPEG using browser-side library (dynamic import to avoid SSR issues)
+  const convertHeicIfNeeded = async (file: File): Promise<File> => {
+    try {
+      const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name);
+      if (!isHeic) return file;
+
+      // Dynamic import so it only loads in the browser
+      const mod: any = await import('heic2any');
+      const toBlob = await mod.default({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+      const blob: Blob = Array.isArray(toBlob) ? toBlob[0] : toBlob;
+      const newName = file.name.replace(/\.(heic|heif)$/i, '') + '.jpg';
+      const converted = new File([blob], newName, { type: 'image/jpeg', lastModified: file.lastModified });
+      return converted;
+    } catch (err) {
+      console.warn('HEIC conversion failed, skipping file:', file.name, err);
+      throw new Error(`${file.name} could not be converted from HEIC/HEIF.`);
+    }
+  };
+
   // Upload all selected files with enhanced error handling
   const uploadFiles = async () => {
     if (selectedFiles.length === 0) return;
@@ -171,7 +192,7 @@ export function MultiPhotoUploader({
         console.warn(`Skipping non-image file: ${file.name}`);
         return false;
       }
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > 10 * 1024 * 1024) {
         console.warn(`Skipping oversized file: ${file.name}`);
         return false;
       }
@@ -187,102 +208,96 @@ export function MultiPhotoUploader({
       return;
     }
 
-    const formData = new FormData();
-    formData.append('userId', userId);
-    
-    // Add files with error handling
-    try {
-      validFiles.forEach((file, index) => {
-        console.log(`Adding file ${index + 1}/${validFiles.length}: ${file.name} (${file.size} bytes)`);
-        formData.append('photos', file);
-      });
-      console.log('FormData prepared with', validFiles.length, 'files for user:', userId);
-    } catch (error) {
-      console.error('Error preparing files for upload:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Upload preparation failed',
-        description: 'Could not prepare files for upload. Please try again.',
-      });
-      return;
-    }
-
     startTransition(async () => {
-      let uploadTimeout: NodeJS.Timeout | null = null;
-      
       try {
         setUploadProgress(0);
-        
-        // Set a timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => {
-          uploadTimeout = setTimeout(() => {
-            reject(new Error('Upload timeout - the upload took too long'));
-          }, 120000); // 2 minute timeout
-        });
-        
-        console.log('Starting upload for', validFiles.length, 'files...');
-        
-        // Use fetch to call the API route instead of server action
-        const uploadPromise = fetch('/api/upload/multiple', {
-          method: 'POST',
-          body: formData
-        }).then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          return response.json();
-        });
-        
-        const result = await Promise.race([uploadPromise, timeoutPromise]) as any;
-        
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
 
-        console.log('Upload result:', result);
-        
-        if (result.success) {
-          console.log('Upload successful! Uploaded', validFiles.length, 'files');
-          toast({
-            title: 'Upload successful!',
-            description: result.message || `Successfully uploaded ${validFiles.length} photo${validFiles.length !== 1 ? 's' : ''}.`,
-          });
-          
-          // Clear selected files and reset state
-          selectedFiles.forEach(file => {
-            if (file.preview) {
-              URL.revokeObjectURL(file.preview);
+        const CONCURRENCY = 3; // keep requests small and parallel
+        const total = validFiles.length;
+        let processed = 0;
+        let succeeded = 0;
+        const errors: string[] = [];
+        let index = 0;
+
+        const uploadSingle = async (file: File) => {
+          // Convert HEIC/HEIF to JPEG before upload
+          let toUpload = file;
+          if (file.type === 'image/heic' || file.type === 'image/heif' || /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name)) {
+            try {
+              toUpload = await convertHeicIfNeeded(file);
+            } catch (convErr) {
+              throw convErr;
             }
+          }
+          const fd = new FormData();
+          fd.append('userId', userId);
+          // Send one file per request to keep body size small
+          fd.append('photos', toUpload);
+
+          const res = await fetch('/api/upload/multiple', {
+            method: 'POST',
+            body: fd
           });
-          setSelectedFiles([]);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          if (!json.success) throw new Error(json.message || 'Upload failed');
+        };
+
+        const runNext = async (): Promise<void> => {
+          const current = index++;
+          if (current >= total) return;
+          const file = validFiles[current];
+          try {
+            await uploadSingle(file);
+            succeeded++;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : 'Unknown error';
+            console.error('Upload failed for', file.name, msg);
+            errors.push(`${file.name}: ${msg}`);
+          } finally {
+            processed++;
+            setUploadProgress(Math.round((processed / total) * 100));
+            // Continue pipeline
+            await runNext();
+          }
+        };
+
+        // Start worker pool
+        const workers = Array.from({ length: Math.min(CONCURRENCY, total) }, () => runNext());
+        await Promise.all(workers);
+
+        // Cleanup previews
+        selectedFiles.forEach(file => {
+          if (file.preview) {
+            URL.revokeObjectURL(file.preview);
+          }
+        });
+        setSelectedFiles([]);
+
+        if (succeeded > 0) {
+          toast({
+            title: 'Upload complete',
+            description: errors.length === 0
+              ? `Uploaded ${succeeded} photo${succeeded !== 1 ? 's' : ''}.`
+              : `Uploaded ${succeeded} of ${total}. ${errors.slice(0, 2).join(', ')}${errors.length > 2 ? '...' : ''}`,
+          });
           setUploadProgress(0);
-          
           onUploadComplete();
         } else {
-          console.error('Upload failed:', result);
           toast({
             variant: 'destructive',
             title: 'Upload failed',
-            description: result.message || 'Unknown error occurred during upload.',
+            description: errors.slice(0, 3).join(', ') || 'All uploads failed.',
           });
+          setUploadProgress(0);
         }
       } catch (error) {
-        if (uploadTimeout) {
-          clearTimeout(uploadTimeout);
-        }
-        
         console.error('Upload error:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
         toast({
           variant: 'destructive',
           title: 'Upload error',
-          description: errorMessage.includes('timeout') 
-            ? 'Upload timed out. Please try with fewer or smaller files.' 
-            : 'An unexpected error occurred during upload. Please try again.',
+          description: error instanceof Error ? error.message : 'Unknown error',
         });
-        
-        // Reset progress on error
         setUploadProgress(0);
       }
     });
@@ -408,7 +423,7 @@ export function MultiPhotoUploader({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
         multiple
         className="sr-only"
         onChange={handleFileSelect}
@@ -418,7 +433,7 @@ export function MultiPhotoUploader({
       <input
         ref={folderInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.heic,.heif"
         multiple
         webkitdirectory=""
         className="sr-only"

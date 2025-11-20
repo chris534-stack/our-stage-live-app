@@ -8,16 +8,48 @@ service cloud.firestore {
       return request.auth.token.email == 'christopher.ridgley@gmail.com';
     }
 
+    // Check if the authenticated user is a venue rep for the given venue ID
+    function isVenueRepForVenue(venueId) {
+      let userProfileData = get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data;
+      return request.auth != null &&
+        userProfileData.isVenueRep == true &&
+        userProfileData.assignedVenueIds != null &&
+        userProfileData.assignedVenueIds.hasAny([venueId]);
+    }
+
     // Venues: Public can read, only admin can write.
     match /venues/{venueId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Events: Public can read, only admin can write.
+    // Events: Public can read. Admin can write. Venue reps can create/update only for assigned venues.
     match /events/{eventId} {
       allow read: if true;
-      allow write: if isAdmin();
+      // Create: venueId must be one of the rep's assigned venues and createdBy must match the creator (for non-admin)
+      allow create: if isAdmin() || (
+        request.auth != null &&
+        isVenueRepForVenue(request.resource.data.venueId) &&
+        request.resource.data.createdBy == request.auth.uid
+      );
+      // Update: Only admin or the original creator may edit. Venue must remain unchanged for non-admin updates.
+      // Legacy fallback: if createdBy is missing/empty (older events), allow assigned venue reps with venue immutability.
+      allow update: if isAdmin() || (
+        request.auth != null && (
+          (
+            resource.data.createdBy == request.auth.uid &&
+            request.resource.data.venueId == resource.data.venueId &&
+            request.resource.data.createdBy == resource.data.createdBy
+          ) || (
+            (resource.data.createdBy == null || resource.data.createdBy == '') &&
+            isVenueRepForVenue(resource.data.venueId) &&
+            request.resource.data.venueId == resource.data.venueId &&
+            request.resource.data.createdBy == resource.data.createdBy
+          )
+        )
+      );
+      // Delete: admin only
+      allow delete: if isAdmin();
     }
 
     // Users: Any authenticated user can read profiles.
@@ -25,6 +57,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth.uid == userId;
+    }
+
+    // Subscription/entitlements plan documents for Line Notes feature
+    // Path: /users/{userId}/plan/{planId}
+    match /users/{userId}/plan/{planId} {
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
     }
 
     // User Profiles: Public can read basic profile info (needed for review tiles),
@@ -39,6 +77,33 @@ service cloud.firestore {
     // Reviews: Public can read, authenticated users can write their own reviews
     match /reviews/{reviewId} {
       allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Line Notes feature collections (owner-only; admin override)
+    // User preferences for Line Notes
+    match /users/{userId}/preferences/{docId} {
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+    }
+
+    // Scripts uploaded by users
+    match /users/{userId}/scripts/{scriptId} {
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      
+      // Scenes within scripts
+      match /scenes/{sceneId} {
+        allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      }
+      
+      // Rehearsal sessions for scenes
+      match /scenes/{sceneId}/sessions/{sessionId} {
+        allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      }
+    }
+
+    // TTS audio cache
+    match /ttsCache/{cacheKey} {
+      allow read: if request.auth != null;
       allow write: if request.auth != null;
     }
 

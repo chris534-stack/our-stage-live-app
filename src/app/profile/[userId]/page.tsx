@@ -1,14 +1,10 @@
-
 import { notFound } from 'next/navigation';
+import type { Review, UserProfile } from '@/lib/types';
 import { getOrCreateUserProfile, getReviewsByUserId } from '@/lib/data';
 import ProfileClientPage from '@/components/profile/ProfileClientPage';
-import { Suspense } from 'react';
-import ProfileLoading from './loading';
-import type { Review, UserProfile } from '@/lib/types';
 
-
-export default async function ProfilePage({ params }: { params: Promise<{ userId: string }> }) {
-  const { userId } = await params;
+export default async function ProfilePage({ params }: { params: { userId: string } }) {
+  const { userId } = params;
 
   try {
     const profile = await getOrCreateUserProfile(userId);
@@ -122,13 +118,8 @@ export default async function ProfilePage({ params }: { params: Promise<{ userId
     // To use actual data for both (normal operation):
     let reviewsToUse = serializableReviews;
     // --- END MOCK DATA DIAGNOSTIC ---
-
-
     return (
-      <Suspense fallback={<ProfileLoading />}>
-        {/* Ensure you use reviewsToUse if you are testing with mock reviews */}
-        <ProfileClientPage initialProfile={serializableProfile} initialReviews={reviewsToUse} />
-      </Suspense>
+      <ProfileClientPage initialProfile={serializableProfile} initialReviews={reviewsToUse} />
     );
   } catch (error) {
     console.error('Error rendering ProfilePage:', error);

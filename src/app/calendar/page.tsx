@@ -21,25 +21,40 @@ async function getCalendarData(): Promise<{ events: ExpandedCalendarEvent[], ven
     reviewsByShowId.get(review.showId)!.push(review);
   });
   
-  const expandedEvents: ExpandedCalendarEvent[] = approvedEvents.flatMap(event => {
-    if (!event.occurrences || event.occurrences.length === 0) {
-      return [];
-    }
-    
-    const eventReviews = reviewsByShowId.get(event.id) || [];
+  const expandedEventsMap = new Map<string, ExpandedCalendarEvent>();
 
-    return event.occurrences.map(occurrence => {
-        const { occurrences, ...restOfEvent } = event;
-        return {
-            ...restOfEvent, // This includes the original event 'id'
-            uniqueOccurrenceId: `${event.id}-${occurrence.date}-${occurrence.time || 'all-day'}`,
-            date: occurrence.date,
-            time: occurrence.time,
-            venue: venuesMap.get(event.venueId),
-            reviews: eventReviews // Attach the reviews for this event
-        };
-    })
+  approvedEvents.forEach(event => {
+    if (!event.occurrences || event.occurrences.length === 0) {
+      return;
+    }
+
+    const eventReviews = reviewsByShowId.get(event.id) || [];
+    const { occurrences, ...restOfEvent } = event;
+
+    event.occurrences.forEach(occurrence => {
+      const uniqueOccurrenceId = `${event.id}-${occurrence.date}-${occurrence.time || 'all-day'}`;
+
+      if (expandedEventsMap.has(uniqueOccurrenceId)) {
+        console.warn('[Calendar] Duplicate occurrence detected, skipping duplicate entry', {
+          eventId: event.id,
+          date: occurrence.date,
+          time: occurrence.time,
+        });
+        return;
+      }
+
+      expandedEventsMap.set(uniqueOccurrenceId, {
+        ...restOfEvent,
+        uniqueOccurrenceId,
+        date: occurrence.date,
+        time: occurrence.time,
+        venue: venuesMap.get(event.venueId),
+        reviews: eventReviews,
+      });
+    });
   });
+
+  const expandedEvents = Array.from(expandedEventsMap.values());
 
   // Sort all occurrences chronologically for the event list view
   expandedEvents.sort((a, b) => {

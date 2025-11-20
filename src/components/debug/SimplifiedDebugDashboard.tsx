@@ -7,22 +7,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  RefreshCw, 
+import {
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  RefreshCw,
   Mail,
   Database,
   Copy,
   ExternalLink,
-  Loader2
+  Loader2,
+  Drama,
+  CalendarDays
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoUploadDebug } from './PhotoUploadDebug';
 import { UploadCorruptionDiagnostic } from './UploadCorruptionDiagnostic';
 import { UploadStressTester } from './UploadStressTester';
+import Link from 'next/link';
 
 interface DebugStats {
   totalInvitations: number;
@@ -140,6 +143,15 @@ export function SimplifiedDebugDashboard() {
       const inviteUrl = `${window.location.origin}/invite/reviewer/${testInvitation.token}`;
       window.open(inviteUrl, '_blank');
     }
+  };
+
+  const copyOnboardingLink = () => {
+    const url = `${window.location.origin}/calendar?onboarding=venue-rep`;
+    navigator.clipboard.writeText(url);
+    toast({
+      title: 'Onboarding Link Copied',
+      description: 'The calendar onboarding URL has been copied.',
+    });
   };
 
   const getHealthScoreColor = (score: number) => {
@@ -328,6 +340,81 @@ export function SimplifiedDebugDashboard() {
         </CardContent>
       </Card>
 
+      {/* Line Notes (Internal) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Drama className="h-5 w-5" />
+            Line Notes Sandbox
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Work-in-progress rehearsal tool. Hidden from end users; access it here while we finish the launch flow.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/line-notes">
+                Open Line Notes
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/line-notes" target="_blank" rel="noopener noreferrer">
+                Open in New Tab
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </a>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Onboarding Tester */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" />
+            Onboarding Tester (Venue Rep)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Launch the calendar with onboarding mode to preview the venue rep intro dialog.
+          </p>
+          <div className="rounded-md border p-3 bg-muted/30 text-sm">
+            <p className="font-medium">Welcome, Venue Representative</p>
+            <p className="text-muted-foreground">
+              Manage events for your assigned venues. You can add new shows, update details, and keep the calendar up to date.
+            </p>
+            <ul className="list-disc pl-5 mt-2 text-muted-foreground">
+              <li>Step 1: Add your first event for one of your venues.</li>
+              <li>Step 2: Edit existing events as needed.</li>
+            </ul>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/calendar?onboarding=venue-rep">
+                Open Calendar (Onboarding Mode)
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={copyOnboardingLink}>
+              <Copy className="h-4 w-4 mr-2" />
+              Copy Test Link
+            </Button>
+            <Button variant="outline" asChild>
+              <a href="/calendar?onboarding=venue-rep" target="_blank" rel="noopener noreferrer">
+                Open in New Tab
+                <ExternalLink className="h-4 w-4 ml-2" />
+              </a>
+            </Button>
+          </div>
+          <Alert className="mt-2">
+            <AlertDescription className="text-xs">
+              Note: The onboarding dialog only appears if your account has the Venue Rep role. Otherwise, the calendar will open normally.
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+
       {/* System Health */}
       {stats && (
         <Card>
@@ -393,3 +480,9 @@ export function SimplifiedDebugDashboard() {
     </div>
   );
 }
+
+
+
+
+
+

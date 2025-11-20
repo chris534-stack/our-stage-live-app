@@ -10,7 +10,12 @@ export default {
   theme: {
     container: {
       center: true,
-      padding: '2rem',
+      // Reduce default (mobile) padding to reclaim space; keep larger padding on md+
+      padding: {
+        DEFAULT: '0.75rem', // ~12px on mobile
+        sm: '1rem',         // ~16px on small screens
+        md: '2rem',         // ~32px on md and up (unchanged from before)
+      },
       screens: {
         '2xl': '1400px',
       },

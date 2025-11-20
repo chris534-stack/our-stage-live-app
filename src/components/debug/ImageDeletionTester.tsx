@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Trash2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { deleteProfilePhotoAction } from '@/lib/actions';
+import { useAuth } from '@/components/auth/AuthProvider';
 
 interface TestResult {
   step: string;
@@ -16,6 +17,7 @@ interface TestResult {
 }
 
 export function ImageDeletionTester() {
+  const { user } = useAuth();
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [testUrl, setTestUrl] = useState('');
@@ -67,7 +69,8 @@ export function ImageDeletionTester() {
     addTestResult('Deletion Test', 'pending', 'Testing image deletion...');
     
     try {
-      const result = await deleteProfilePhotoAction('test-user-id', url);
+      const idToken = await user?.getIdToken?.();
+      const result = await deleteProfilePhotoAction('test-user-id', url, idToken || undefined);
       
       if (result.success) {
         addTestResult('Deletion Test', 'success', 'Deletion completed successfully!', result);

@@ -1,6 +1,7 @@
 import { initializeApp, getApps, getApp, FirebaseOptions, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 // Helper function to check if we're running in a browser environment
 const isBrowser = () => typeof window !== 'undefined';
@@ -28,6 +29,7 @@ const firebaseConfig: FirebaseOptions = {
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
+let storage: FirebaseStorage | undefined;
 
 // Make sure we're in a browser environment before initializing Firebase
 if (isBrowser()) {
@@ -35,9 +37,32 @@ if (isBrowser()) {
     app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
     db = getFirestore(app);
+    storage = getStorage(app);
   } catch (error) {
     console.error('Firebase initialization error:', error);
   }
 }
 
-export { app, auth, db };
+export { app, auth, db, storage };
+
+// Client-only helpers to provide non-undefined instances for TS safety
+export function getClientAuth(): Auth {
+  if (!isBrowser() || !auth) {
+    throw new Error('Firebase Auth is not initialized in this environment');
+  }
+  return auth;
+}
+
+export function getClientDb(): Firestore {
+  if (!isBrowser() || !db) {
+    throw new Error('Firebase Firestore is not initialized in this environment');
+  }
+  return db;
+}
+
+export function getClientStorage(): FirebaseStorage {
+  if (!isBrowser() || !storage) {
+    throw new Error('Firebase Storage is not initialized in this environment');
+  }
+  return storage;
+}

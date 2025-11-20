@@ -9,6 +9,7 @@ import type { NewsArticle } from '@/lib/types';
 import { updateNewsArticleOrderAction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth/AuthProvider';
+import { getClientAuth } from '@/lib/firebase';
 
 export function NewsList({ initialArticles }: { initialArticles: NewsArticle[] }) {
     const [articles, setArticles] = useState(initialArticles);
@@ -37,7 +38,13 @@ export function NewsList({ initialArticles }: { initialArticles: NewsArticle[] }
         const orderedIds = items.map(item => item.id);
         
         startTransition(async () => {
-            const res = await updateNewsArticleOrderAction(orderedIds);
+            let idToken: string | undefined = undefined;
+            try {
+                idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+            } catch (_) {
+                // Non-fatal; server will attempt header-based auth as a fallback
+            }
+            const res = await updateNewsArticleOrderAction(orderedIds, idToken);
             if (res.success) {
                 toast({ title: "Order Updated", description: "The news article order has been saved." });
             } else {

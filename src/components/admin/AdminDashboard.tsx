@@ -1,6 +1,5 @@
 'use client';
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ResponsiveAdminLayout, type AdminSection } from '@/components/admin/ResponsiveAdminLayout';
 import { ResponsiveEventManager } from '@/components/admin/ResponsiveEventManager';
 import { VenueManager } from '@/components/admin/VenueManager';
@@ -10,13 +9,30 @@ import { ReviewerHub } from '@/components/admin/ReviewerHub';
 import { CommunitySpotlights } from '@/components/admin/CommunitySpotlights';
 import { Analytics } from '@/components/admin/Analytics';
 import { SimplifiedDebugDashboard } from '@/components/debug/SimplifiedDebugDashboard';
+import { VenueRepInvitations } from '@/components/admin/VenueRepInvitations';
+import { ActiveVenueReps } from '@/components/admin/ActiveVenueReps';
 import type { Event, Venue } from '@/lib/types';
+import type { EventWithCreator } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-type EventWithVenue = Event & { venue?: Venue };
+type EventWithVenueAndCreator = Event & { venue?: Venue } & EventWithCreator;
 
-export default function AdminDashboard({ initialEvents, venues }: { initialEvents: EventWithVenue[], venues: Venue[] }) {
+export default function AdminDashboard({ initialEvents, venues }: { initialEvents: EventWithVenueAndCreator[], venues: Venue[] }) {
   const [activeSection, setActiveSection] = useState<AdminSection>('events');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Keep active section in sync with ?section=
+  useEffect(() => {
+    const section = searchParams.get('section') as AdminSection | null;
+    const valid: AdminSection[] = ['events','venues','scraper','users','reviewers','spotlights','analytics','venueReps','debug'];
+    if (section && valid.includes(section) && section !== activeSection) {
+      setActiveSection(section);
+    }
+  }, [searchParams, activeSection]);
+
+  const autoOpenInvite = searchParams.get('invite') === '1';
 
   const renderSectionContent = () => {
     switch (activeSection) {
@@ -61,6 +77,14 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
       case 'reviewers':
         return <ReviewerHub />;
       
+      case 'venueReps':
+        return (
+          <div className="space-y-6">
+            <ActiveVenueReps venues={venues} />
+            <VenueRepInvitations venues={venues} autoOpenInvite={autoOpenInvite} hideInviteButton />
+          </div>
+        );
+      
       case 'spotlights':
         return <CommunitySpotlights />;
       
@@ -86,7 +110,14 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
   return (
     <ResponsiveAdminLayout
       activeSection={activeSection}
-      onSectionChange={setActiveSection}
+      onSectionChange={(s) => {
+        setActiveSection(s);
+        // keep URL in sync and clear invite param unless explicitly set later
+        const url = new URL(window.location.href);
+        url.searchParams.set('section', s);
+        url.searchParams.delete('invite');
+        router.push(`${url.pathname}?${url.searchParams.toString()}`);
+      }}
     >
       {renderSectionContent()}
     </ResponsiveAdminLayout>

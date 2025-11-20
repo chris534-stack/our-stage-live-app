@@ -28,12 +28,18 @@
     "ignore": [
       "node_modules",
       ".git",
+      ".next",
+      ".turbo",
+      "services",
+      "**/.venv",
+      "tmp-backups",
       "firebase-debug.log",
       "firebase-debug.*.log",
+      "*.log",
       "functions"
     ]
   },
   "storage": {
-    "rules": "firestore.rules"
+    "rules": "storage.rules"
   }
 }

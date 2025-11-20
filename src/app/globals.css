@@ -52,6 +52,7 @@
 @layer base {
   html {
     overflow-y: scroll;
+    overflow-x: hidden; /* Prevent horizontal scrolling */
   }
   * {
     @apply border-border;
@@ -60,6 +61,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden; /* Guard against children causing sideways scroll */
   }
 
   /* Custom Scrollbar Styles for Webkit */

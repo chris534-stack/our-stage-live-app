@@ -55,6 +55,17 @@ export function PhotoUploader({ userId, onUploadComplete, isGridItem = false, li
                 });
                 return;
             }
+
+            // Explicitly reject HEIC/HEIF which is not broadly supported on the web
+            const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || /\.heic$/i.test(file.name) || /\.heif$/i.test(file.name);
+            if (isHeic) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Unsupported format (HEIC/HEIF)',
+                    description: 'Please convert the photo to JPEG or PNG and try again.',
+                });
+                return;
+            }
             
             // Check file size (10MB limit)
             const maxSize = 10 * 1024 * 1024; // 10MB
@@ -185,7 +196,7 @@ export function PhotoUploader({ userId, onUploadComplete, isGridItem = false, li
                                     <FormControl>
                                         <Input
                                             type="file"
-                                            accept="image/*"
+                                            accept="image/jpeg,image/png,image/gif,image/webp"
                                             className="sr-only"
                                             ref={fileInputRef}
                                             onChange={handleFileChange}

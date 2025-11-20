@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useSwipeable } from 'react-swipeable';
+import { useAuth } from '@/components/auth/AuthProvider';
+import SignInPromptModal from '@/components/SignInPromptModal';
 
 interface CommunityDirectoryProps {
   isOpen: boolean;
@@ -18,6 +20,8 @@ export function CommunityDirectory({ isOpen, onClose }: CommunityDirectoryProps)
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [showSignIn, setShowSignIn] = useState(false);
 
   useEffect(() => {
     if (isOpen && profiles.length === 0) {
@@ -82,7 +86,7 @@ export function CommunityDirectory({ isOpen, onClose }: CommunityDirectoryProps)
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
       <div className="relative w-full max-w-6xl h-full max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 text-white">
@@ -174,12 +178,32 @@ export function CommunityDirectory({ isOpen, onClose }: CommunityDirectoryProps)
 
         {/* Footer Instructions */}
         {profiles.length > 0 && (
-          <div className="text-center text-white/75 text-sm mt-6">
+          <div className="text-center text-white/75 text-sm mt-3">
             <p className="hidden sm:block">Use arrow keys or click the arrows to browse • Click a playbill to view their full story</p>
             <p className="block sm:hidden">Swipe left or right to browse • Tap a playbill to view their full story</p>
+          </div>
+        )}
+
+        {/* Signed-out CTA to create profile */}
+        {!user && (
+          <div className="mt-2 flex flex-col items-center">
+            <Button
+              onClick={() => setShowSignIn(true)}
+              className="bg-yellow-400 hover:bg-yellow-500 text-black font-bold px-6 py-6 rounded-full shadow-lg"
+              size="lg"
+            >
+              Create your profile
+            </Button>
+            <SignInPromptModal
+              isOpen={showSignIn}
+              onClose={() => setShowSignIn(false)}
+              title="Sign in to get started"
+              description="Join the community and share your story."
+            />
           </div>
         )}
       </div>
     </div>
   );
 }
+

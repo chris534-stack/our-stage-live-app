@@ -1,4 +1,4 @@
-import { getAllEvents, getAllVenues } from '@/lib/data';
+import { getAllEventsWithCreator, getAllVenues } from '@/lib/data';
 import AdminDashboard from '@/components/admin/AdminDashboard';
 import type { Venue } from '@/lib/types';
 import AdminAuthGuard from '@/components/auth/AdminAuthGuard';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminPage() {
   const [allEvents, allVenues] = await Promise.all([
-    getAllEvents(),
+    getAllEventsWithCreator(),
     getAllVenues()
   ]);
   

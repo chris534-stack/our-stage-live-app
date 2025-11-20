@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { getClientAuth } from '@/lib/firebase';
 
 const profileFormSchema = z.object({
     displayName: z.string().min(2, "Display name is required."),
@@ -55,7 +56,13 @@ export function EditProfileSheet({ isOpen, onClose, profile, onProfileUpdate }: 
         const updateData: Partial<UserProfile> = { ...data };
 
         startTransition(async () => {
-            const result = await updateUserProfileAction(profile.userId, updateData);
+            let idToken: string | undefined = undefined;
+            try {
+                idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+            } catch (_) {
+                // Non-fatal; server will attempt header-based auth as a fallback
+            }
+            const result = await updateUserProfileAction(profile.userId, updateData, idToken);
 
             if (result.success) {
                 toast({ title: 'Profile Updated!', description: 'Your changes have been saved.' });

@@ -4,7 +4,14 @@ import { CommunitySpotlightCard } from './CommunitySpotlight';
 import { useEffect, useState } from 'react';
 import type { CommunitySpotlight } from '@/lib/types';
 
-export function CommunitySpotlightSection() {
+type Props = {
+  // full: original centered section with container
+  // sidebar: compact version for right column on large screens
+  variant?: 'full' | 'sidebar';
+  className?: string;
+};
+
+export function CommunitySpotlightSection({ variant = 'full', className }: Props) {
   const [activeSpotlight, setActiveSpotlight] = useState<CommunitySpotlight | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,9 +40,24 @@ export function CommunitySpotlightSection() {
     return null;
   }
 
+  if (variant === 'sidebar') {
+    return (
+      <aside className={`w-full ${className ?? ''}`}>
+        <div className="lg:sticky lg:top-24">
+          <div className="mb-4">
+            <h2 className="text-2xl md:text-3xl font-bold font-headline text-primary">
+              Community Spotlight
+            </h2>
+          </div>
+          <CommunitySpotlightCard spotlight={activeSpotlight} />
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <section className="py-8 md:py-12 bg-muted/30">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-0 sm:px-2">
         <div className="text-center mb-8">
           <h2 className="text-3xl md:text-4xl font-bold font-headline text-primary mb-2">
             Community Spotlight

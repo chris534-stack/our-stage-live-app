@@ -12,3 +12,10 @@ export function toTitleCase(str: string | undefined): string {
     (txt) => txt.charAt(0).toUpperCase() + txt.substring(1).toLowerCase()
   );
 }
+
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.substring(0, maxLength)}...`;
+}

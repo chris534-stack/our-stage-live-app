@@ -14,8 +14,10 @@ import {
   BarChart3,
   Menu,
   X,
-  Bug
+  Bug,
+  UserCog
 } from 'lucide-react';
+import { NotificationBell } from '@/components/admin/NotificationBell';
 
 export type AdminSection = 
   | 'events' 
@@ -25,6 +27,7 @@ export type AdminSection =
   | 'reviewers'
   | 'spotlights'
   | 'analytics'
+  | 'venueReps'
   | 'debug';
 
 interface AdminNavItem {
@@ -42,6 +45,7 @@ const navItems: AdminNavItem[] = [
   { id: 'reviewers', label: 'Reviewer Hub', icon: UserCheck, mobileLabel: 'Reviewers' },
   { id: 'spotlights', label: 'Community Spotlights', icon: Star, mobileLabel: 'Spotlights' },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, mobileLabel: 'Analytics' },
+  { id: 'venueReps', label: 'Venue Representatives', icon: UserCog, mobileLabel: 'Venue Reps' },
   { id: 'debug', label: 'Debug Tools', icon: Bug, mobileLabel: 'Debug' },
 ];
 
@@ -95,13 +99,19 @@ export function ResponsiveAdminLayout({
       <div className="md:hidden">
         <div className="flex items-center justify-between p-4 bg-white border-b border-gray-200">
           <h1 className="text-lg font-bold font-headline text-primary">Admin</h1>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          <div className="flex items-center gap-1">
+            <NotificationBell
+              onGoToVenueReps={() => onSectionChange('venueReps')}
+              onGoToReviewers={() => onSectionChange('reviewers')}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
         </div>
 
         {/* Mobile Menu Overlay */}
@@ -145,6 +155,13 @@ export function ResponsiveAdminLayout({
       {/* Main Content */}
       <div className="md:pl-64">
         <div className="flex flex-col">
+          {/* Desktop Top Bar */}
+          <div className="hidden md:flex items-center justify-end bg-white border-b border-gray-200 px-4 py-3">
+            <NotificationBell
+              onGoToVenueReps={() => onSectionChange('venueReps')}
+              onGoToReviewers={() => onSectionChange('reviewers')}
+            />
+          </div>
           {/* Content Area */}
           <main className="flex-1">
             <div className="p-4 md:p-8">

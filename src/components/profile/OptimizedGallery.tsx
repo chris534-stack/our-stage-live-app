@@ -15,6 +15,7 @@ interface OptimizedGalleryProps {
   onReorderClick?: (url: string, index: number) => void;
   onDeleteClick?: (url: string) => void;
   isOwner?: boolean;
+  isAdmin?: boolean;
 }
 
 interface ImageLoadState {
@@ -29,7 +30,8 @@ export function OptimizedGallery({
   selectedPhotoToMove = null,
   onReorderClick,
   onDeleteClick,
-  isOwner = false
+  isOwner = false,
+  isAdmin = false
 }: OptimizedGalleryProps) {
   const [currentPage, setCurrentPage] = useState(0);
   const [imageLoadStates, setImageLoadStates] = useState<ImageLoadState>({});
@@ -216,10 +218,11 @@ export function OptimizedGallery({
                 key={`${imageUrl}-${globalIndex}`}
                 onClick={() => handleImageClick(imageUrl, index)}
                 className={cn(
-                  "aspect-square relative rounded-md sm:rounded-lg overflow-hidden group transition-all duration-200 bg-muted cursor-pointer",
+                  "aspect-square relative rounded-md sm:rounded-lg overflow-hidden group transition-all duration-200 bg-muted cursor-pointer will-change-transform",
                   isReordering && isSelectedForMove && "ring-2 sm:ring-4 ring-offset-1 sm:ring-offset-2 ring-primary z-10 scale-105 shadow-lg",
                   isReordering && selectedPhotoToMove && !isSelectedForMove && "opacity-60 hover:opacity-100 hover:scale-105",
-                  !isReordering && !isDeleting && "hover:scale-105 hover:shadow-lg"
+                  // Subtle hover for normal view: barely scale tile and soften shadow
+                  !isReordering && !isDeleting && "hover:scale-[1.005] hover:shadow-md"
                 )}
               >
                 {/* Loading State */}
@@ -244,10 +247,11 @@ export function OptimizedGallery({
                   className={cn(
                     "object-cover transition-all duration-200",
                     loadState === 'loaded' ? "opacity-100" : "opacity-0",
-                    !isReordering && !isDeleting && "group-hover:scale-110"
+                    // Subtle inner zoom on hover
+                    !isReordering && !isDeleting && "group-hover:scale-[1.03]"
                   )}
                   sizes="(max-width: 640px) 50vw, 33vw"
-                  priority={currentPage <= 1 && index < 4} // Prioritize first two pages (2x2 grid)
+                  priority={currentPage <= 1 && index < 4}
                   quality={85}
                 />
                 
@@ -257,11 +261,13 @@ export function OptimizedGallery({
                 )}
                 
                 {/* Delete Button */}
-                {isDeleting && isOwner && onDeleteClick && (
+                {isDeleting && (isOwner || isAdmin) && onDeleteClick && (
                   <Button
+                    type="button"
                     variant="destructive"
                     size="sm"
-                    className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 hover:scale-110 transition-all duration-200 shadow-lg"
+                    className="absolute top-2 right-2 z-20 h-8 w-8 p-0 opacity-100 hover:scale-110 transition-all duration-200 shadow-lg"
+                    aria-label="Delete photo"
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteClick(imageUrl);
@@ -273,10 +279,10 @@ export function OptimizedGallery({
                 
                 {/* Delete Mode Overlay */}
                 {isDeleting && (
-                  <div className="absolute inset-0 bg-red-500/10 group-hover:bg-red-500/20 transition-colors duration-200" />
+                  <div className="absolute inset-0 z-10 pointer-events-none bg-red-500/10 group-hover:bg-red-500/20 transition-colors duration-200" />
                 )}
               </div>
-            );
+              );
           })}
         </div>
       </div>
@@ -337,3 +343,4 @@ export function OptimizedGallery({
     </div>
   );
 }
+

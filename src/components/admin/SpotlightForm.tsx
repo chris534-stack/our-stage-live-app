@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import type { CommunitySpotlight } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { createSpotlightAction, updateSpotlightAction, deleteSpotlightAction, uploadSpotlightPhotoAction } from '@/lib/actions';
+import { getClientAuth } from '@/lib/firebase';
 
 const spotlightSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100, 'Name must be less than 100 characters'),
@@ -125,7 +126,16 @@ export function SpotlightForm({ spotlight, onSuccess, onCancel, onDelete }: Spot
       formData.append('photo', file);
       formData.append('type', 'spotlight');
 
-      const result = await uploadSpotlightPhotoAction(formData);
+      // Retrieve Firebase ID token for authenticated server action
+      let idToken: string | undefined;
+      try {
+        const auth = getClientAuth();
+        idToken = await auth.currentUser?.getIdToken();
+      } catch (e) {
+        console.error('Failed to get ID token for spotlight photo upload', e);
+      }
+
+      const result = await uploadSpotlightPhotoAction(formData, idToken);
       if (result.success && result.url) {
         setPhotoUrl(result.url);
         toast({
@@ -187,13 +197,22 @@ export function SpotlightForm({ spotlight, onSuccess, onCancel, onDelete }: Spot
         adminNotes: data.adminNotes || undefined,
       };
 
+      // Retrieve Firebase ID token for authenticated server actions
+      let idToken: string | undefined;
+      try {
+        const auth = getClientAuth();
+        idToken = await auth.currentUser?.getIdToken();
+      } catch (e) {
+        console.error('Failed to get ID token for spotlight actions', e);
+      }
+
       let result;
       if (spotlight) {
         // Update existing spotlight
-        result = await updateSpotlightAction(spotlight.id, spotlightData);
+        result = await updateSpotlightAction(spotlight.id, spotlightData, idToken);
       } else {
         // Create new spotlight
-        result = await createSpotlightAction(spotlightData);
+        result = await createSpotlightAction(spotlightData, idToken);
       }
 
       if (result.success && result.spotlight) {

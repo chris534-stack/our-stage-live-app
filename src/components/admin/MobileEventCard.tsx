@@ -12,7 +12,8 @@ import {
   Trash2, 
   MapPin,
   Calendar,
-  MoreVertical
+  MoreVertical,
+  User
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -35,13 +36,22 @@ import type { Event, Venue, EventStatus } from '@/lib/types';
 import { updateEventStatusAction, deleteEventAction } from '@/lib/actions';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { toTitleCase } from '@/lib/utils';
+import { toTitleCase, truncateText } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import type { EventWithCreator } from '@/lib/data';
 import { EventEditorModal } from './EventEditorModal';
+import { getClientAuth } from '@/lib/firebase';
 
 type EventWithVenue = Event & { venue?: Venue };
+type EventWithVenueAndCreator = EventWithVenue & EventWithCreator;
 
 interface MobileEventCardProps {
-  event: EventWithVenue;
+  event: EventWithVenueAndCreator;
   venues: Venue[];
 }
 
@@ -97,7 +107,13 @@ export function MobileEventCard({ event, venues }: MobileEventCardProps) {
 
   const handleStatusUpdate = (status: 'approved' | 'denied') => {
     startTransition(async () => {
-      const result = await updateEventStatusAction(event.id, status);
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await updateEventStatusAction(event.id, status, idToken);
       if (result.success) {
         toast({ title: 'Success', description: result.message });
       } else {
@@ -110,7 +126,13 @@ export function MobileEventCard({ event, venues }: MobileEventCardProps) {
     setIsAlertOpen(false);
     
     startTransition(async () => {
-      const result = await deleteEventAction(event.id);
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await deleteEventAction(event.id, idToken);
       if (result.success) {
         toast({ title: 'Success', description: result.message });
       } else {
@@ -178,6 +200,27 @@ export function MobileEventCard({ event, venues }: MobileEventCardProps) {
             <div className="flex items-center text-sm text-muted-foreground">
               <Calendar className="mr-2 h-4 w-4 flex-shrink-0" />
               <span>{formatFirstOccurrence(event)}</span>
+            </div>
+
+            <div className="flex items-center text-sm text-muted-foreground">
+              <User className="mr-2 h-4 w-4 flex-shrink-0" />
+              <span className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="truncate">
+                        {truncateText(event.createdByName || event.createdByEmail || 'Unknown', 25)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{event.createdByName || event.createdByEmail || 'Unknown'}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {event.createdByIsVenueRep && (
+                  <Badge variant="outline">Rep</Badge>
+                )}
+              </span>
             </div>
 
             {event.description && (

@@ -13,8 +13,11 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import SignInPromptModal from '@/components/SignInPromptModal';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EditReviewForm } from '@/components/reviews/EditReviewForm';
 
-type FontSize = 'small' | 'medium' | 'large';
+export type FontSize = 'small' | 'medium' | 'large';
 
 interface ReviewSectionProps {
     title: string;
@@ -92,16 +95,23 @@ function FontSizeControls({ fontSize, onFontSizeChange }: FontSizeControlsProps)
     )
 }
 
-export function ReviewCard({ review, hideHeader = false }: { review: Review, hideHeader?: boolean }) {
+export function ReviewCard({ review, hideHeader = false, controlledFontSize, onFontSizeChange }: { review: Review, hideHeader?: boolean, controlledFontSize?: FontSize, onFontSizeChange?: (size: FontSize) => void }) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [isPending, startTransition] = useTransition();
+    const router = useRouter();
 
     const [localLikes, setLocalLikes] = useState(review.likes || 0);
     const [localDislikes, setLocalDislikes] = useState(review.dislikes || 0);
     const [voted, setVoted] = useState<'like' | 'dislike' | null>(null);
     const [showSignInModal, setShowSignInModal] = useState(false);
-    const [fontSize, setFontSize] = useState<FontSize>('medium');
+    const [localFontSize, setLocalFontSize] = useState<FontSize>('medium');
+    const fontSize: FontSize = controlledFontSize ?? localFontSize;
+    const setFontSize = (size: FontSize) => {
+        if (onFontSizeChange) onFontSizeChange(size);
+        else setLocalFontSize(size);
+    };
+    const [isEditOpen, setIsEditOpen] = useState(false);
 
     const handleVote = (voteType: 'like' | 'dislike') => {
         if (!user) {
@@ -137,25 +147,37 @@ export function ReviewCard({ review, hideHeader = false }: { review: Review, hid
             <Card>
                 {!hideHeader && (
                     <CardHeader>
-                        <div className="flex justify-between items-start">
+                        <div className="flex items-center justify-between">
                             <div>
-                                <CardTitle className="text-base">
-                                     <Link href={`/profile/${review.reviewerId}`} className="hover:underline">
-                                        {review.reviewerName}
-                                    </Link>
+                                <CardTitle className={cn('font-headline', hideHeader && 'sr-only')}>
+                                    Review for {review.showTitle}
                                 </CardTitle>
-                                <CardDescription className="text-xs mt-1">
-                                    Reviewed performance on {new Date(review.performanceDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}
-                                </CardDescription>
+                                {!hideHeader && (
+                                    <CardDescription>
+                                        By{' '}
+                                        <Link href={`/profile/${review.reviewerId}`} className="hover:underline">
+                                            {review.reviewerName}
+                                        </Link>
+                                    </CardDescription>
+                                )}
+                                {!!review.updatedAt && (
+                                    <p className="text-[11px] text-muted-foreground mt-1">Edited on {new Date(review.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</p>
+                                )}
                             </div>
-                            <Badge variant="secondary">{review.overallExperience}</Badge>
+                            <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="text-xs">
+                                    {review.overallExperience}
+                                </Badge>
+                                {user?.uid === review.reviewerId && (
+                                    <Button size="sm" variant="outline" onClick={() => setIsEditOpen(true)}>
+                                        Edit
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </CardHeader>
                 )}
-                <CardContent className={cn("space-y-6", hideHeader && "pt-6")}>
-                    {/* Font Size Controls */}
-                    <FontSizeControls fontSize={fontSize} onFontSizeChange={setFontSize} />
-                    
+                <CardContent className={cn("space-y-6", hideHeader && "pt-6")}> 
                     {/* Recommendations */}
                     <div className="flex flex-wrap gap-2">
                         {review.recommendations?.map(rec => <Badge key={rec} variant="outline">{rec}</Badge>)}
@@ -209,6 +231,47 @@ export function ReviewCard({ review, hideHeader = false }: { review: Review, hid
                         )}
                     </div>
 
+                    {/* Sticky minimal font size controls for modal (hideHeader=true), only when uncontrolled */}
+                    {hideHeader && !controlledFontSize && (
+                        <div className="sticky bottom-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t px-4 sm:px-6 py-2">
+                            <div className="flex items-center justify-end gap-2">
+                                <Button
+                                    variant={fontSize === 'small' ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => setFontSize('small')}
+                                    aria-label="Decrease text size"
+                                >
+                                    A-
+                                </Button>
+                                <Button
+                                    variant={fontSize === 'medium' ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => setFontSize('medium')}
+                                    aria-label="Default text size"
+                                >
+                                    A
+                                </Button>
+                                <Button
+                                    variant={fontSize === 'large' ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => setFontSize('large')}
+                                    aria-label="Increase text size"
+                                >
+                                    A+
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Inline controls for non-modal usage */}
+                    {!hideHeader && (
+                        <div>
+                            <FontSizeControls fontSize={fontSize} onFontSizeChange={setFontSize} />
+                        </div>
+                    )}
                 </CardContent>
                 <CardFooter className="flex justify-end items-center gap-4">
                     <span className="text-sm text-muted-foreground">Helpful?</span>
@@ -236,6 +299,22 @@ export function ReviewCard({ review, hideHeader = false }: { review: Review, hid
                 title="Login Required"
                 description="You must be signed in to vote on reviews."
             />
+            {/* Edit Review Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle>Edit Your Review</DialogTitle>
+                    </DialogHeader>
+                    <EditReviewForm
+                        review={review}
+                        onSuccess={() => {
+                            setIsEditOpen(false);
+                            router.refresh();
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
+

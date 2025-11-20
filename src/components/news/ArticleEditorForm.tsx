@@ -16,6 +16,7 @@ import { Loader2 } from 'lucide-react';
 import { toTitleCase } from '@/lib/utils';
 import Image from 'next/image';
 import { Label } from '@/components/ui/label';
+import { getClientAuth } from '@/lib/firebase';
 
 const articleFormSchema = z.object({
   title: z.string().min(3, 'Title is required.'),
@@ -55,7 +56,13 @@ export function ArticleEditorForm({ initialData, onSuccess }: ArticleEditorFormP
 
   const onSubmit = (data: ArticleFormValues) => {
     startTransition(async () => {
-      const result = await saveNewsArticleAction(data);
+      let idToken: string | undefined = undefined;
+      try {
+        idToken = (await getClientAuth().currentUser?.getIdToken()) || undefined;
+      } catch (_) {
+        // Non-fatal; server will attempt header-based auth as a fallback
+      }
+      const result = await saveNewsArticleAction(data, idToken);
 
       if (result.success) {
         toast({

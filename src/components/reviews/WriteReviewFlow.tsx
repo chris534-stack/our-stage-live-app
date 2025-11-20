@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, cloneElement, isValidElement } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +10,9 @@ import { format, parseISO, isAfter, isBefore, addDays, isPast } from 'date-fns';
 import type { Event, EventOccurrence, ExpandedCalendarEvent } from '@/lib/types';
 import { ReviewSubmissionModal } from '@/components/reviews/ReviewSubmissionModal';
 import Link from 'next/link';
+import { useAuth } from '@/components/auth/AuthProvider';
+import SignInPromptModal from '@/components/SignInPromptModal';
+import type { MouseEvent, KeyboardEvent } from 'react';
 
 interface WriteReviewFlowProps {
   trigger: React.ReactNode;
@@ -24,6 +27,8 @@ export function WriteReviewFlow({ trigger }: WriteReviewFlowProps) {
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSignInModal, setShowSignInModal] = useState(false);
+  const { user } = useAuth();
 
   // Fetch recent events when dialog opens
   useEffect(() => {
@@ -137,6 +142,52 @@ export function WriteReviewFlow({ trigger }: WriteReviewFlowProps) {
     // Reset the entire flow after successful review submission
     setTimeout(resetFlow, 300);
   };
+
+  const openFlowForAuthenticatedUser = () => {
+    setIsOpen(true);
+  };
+
+  const handleTriggerClick = (event?: MouseEvent | KeyboardEvent) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    if (!user) {
+      setShowSignInModal(true);
+      return;
+    }
+    openFlowForAuthenticatedUser();
+  };
+
+  useEffect(() => {
+    if (user && showSignInModal) {
+      setShowSignInModal(false);
+      openFlowForAuthenticatedUser();
+    }
+  }, [showSignInModal, user]);
+
+  const triggerNode = isValidElement(trigger)
+    ? cloneElement(trigger as React.ReactElement<{ onClick?: (event: MouseEvent) => void }>, {
+        onClick: (event: MouseEvent) => {
+          trigger.props.onClick?.(event);
+          handleTriggerClick(event);
+        },
+      })
+    : (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(event) => handleTriggerClick(event)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              handleTriggerClick(event);
+            }
+          }}
+          className="inline-block"
+        >
+          {trigger}
+        </span>
+      );
 
   const renderShowSelection = () => {
     // Separate events into reviewable (past) and upcoming
@@ -402,10 +453,8 @@ export function WriteReviewFlow({ trigger }: WriteReviewFlowProps) {
 
   return (
     <>
-      <div onClick={() => setIsOpen(true)}>
-        {trigger}
-      </div>
-      
+      {triggerNode}
+
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
           <DialogHeader>
@@ -422,11 +471,18 @@ export function WriteReviewFlow({ trigger }: WriteReviewFlowProps) {
           </div>
         </DialogContent>
       </Dialog>
-      
+
       <ReviewSubmissionModal
         isOpen={isReviewModalOpen}
         onClose={handleReviewModalClose}
         event={selectedExpandedEvent}
+      />
+
+      <SignInPromptModal
+        isOpen={showSignInModal}
+        onClose={() => setShowSignInModal(false)}
+        title="Please Sign In"
+        description="Log in or create a free account to share your review with the community."
       />
     </>
   );

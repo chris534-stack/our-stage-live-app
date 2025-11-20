@@ -26,7 +26,9 @@ export type Event = {
   type: EventType;
   tags?: string[];
   status: EventStatus;
+  createdBy: string;
   url?: string;
+  posterUrl?: string;
 };
 
 export type Idea = {
@@ -62,6 +64,7 @@ export type Review = {
     reviewerId: string;
     reviewerName: string;
     createdAt: string;
+    updatedAt?: string;
     overallExperience: string;
     specialMomentsText: string;
     recommendations: string[];
@@ -113,6 +116,14 @@ export type UserProfile = {
   showEmail?: boolean;
   authStatus?: 'active' | 'notFound';
   isReviewer?: boolean;
+  // Venue Representative role flags
+  isVenueRep?: boolean;
+  assignedVenueIds?: string[]; // Venue IDs this user may manage events for
+  // Onboarding flags for Venue Representatives
+  hasSeenVenueRepIntro?: boolean;            // Whether user has dismissed or viewed the intro modal
+  venueRepOnboardingCompleted?: boolean;     // Set to true when user completes onboarding
+  // Testing flag to mark profiles created by automated tests or seeded data
+  isTest?: boolean;
 };
 
 export type ReviewerInvitation = {
@@ -127,6 +138,32 @@ export type ReviewerInvitation = {
   usedAt?: string;                 // When invitation was used (if accepted)
   acceptedByUserId?: string;       // Firebase user ID who accepted
   archived?: boolean;              // Whether this invitation has been archived
+};
+
+// Invitation to grant Venue Representative privileges for specific venues
+export type VenueRepresentativeInvitation = {
+  id: string;
+  email: string;                   // Email address of invitee
+  token: string;                   // Secure, single-use token
+  invitedBy: string;               // Admin user ID who sent invite
+  invitedByName: string;           // Admin display name
+  assignedVenueIds: string[];      // Venue IDs assigned via this invite
+  createdAt: string;               // When invitation was created
+  expiresAt: string;               // When invitation expires (e.g., 7 days)
+  status: 'pending' | 'accepted' | 'expired';
+  usedAt?: string;                 // When invitation was used (if accepted)
+  acceptedByUserId?: string;       // Firebase user ID who accepted
+  archived?: boolean;              // Whether this invitation has been archived
+  
+  // Unbound invite extras (for short code challenge)
+  // When creating an unbound invite, set email to an empty string and isUnbound to true.
+  isUnbound?: boolean;             // If true, this invite is not tied to a specific email
+  claimCodeHash?: string;          // Scrypt hash of the short claim code
+  claimCodeSalt?: string;          // Salt used for hashing the claim code
+  claimCodeAttemptCount?: number;  // Number of failed attempts so far
+  claimCodeMaxAttempts?: number;   // Max allowed failed attempts before lockout (default 5)
+  claimCodeLocked?: boolean;       // Whether further attempts are locked due to too many failures
+  claimCodeLockedAt?: string;      // When the invite was locked (if locked)
 };
 
 export type CommunitySpotlight = {
@@ -145,4 +182,73 @@ export type CommunitySpotlight = {
     social?: string;
   };
   adminNotes?: string;             // Internal admin notes
+};
+
+// --- Line Notes (Rehearse My Lines) domain types ---
+
+export type ScriptDoc = {
+  id: string;
+  ownerId: string;                // UID of the owner
+  name: string;                   // Original filename or user-provided title
+  storagePath: string;            // gs://... or bucket-relative path to the uploaded script asset
+  fileType: 'pdf' | 'image' | 'unknown';
+  createdAt: string;
+  updatedAt?: string;
+  characters?: string[];          // Populated by OCR parse
+  sceneIds?: string[];            // References into scenes collection
+  parseStatus?: 'pending' | 'parsed' | 'error';
+  parseError?: string;
+};
+
+export type SceneDoc = {
+  id: string;
+  ownerId: string;                // UID of the owner
+  scriptId: string;               // Parent script
+  name: string;                   // Scene label (e.g., "Act 1, Scene 2")
+  order: number;                  // Sort order
+  characters: string[];           // Characters present in scene
+  lines: Array<{
+    id: string;                   // Stable ID for caching TTS
+    speaker: string;              // Character name
+    text: string;                 // Dialogue text
+    stageDirections?: string;     // Optional directions tied to the line
+    ttsAudioPath?: string;        // Cached audio path for non-user speakers
+  }>;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type RehearsalSession = {
+  id: string;
+  ownerId: string;                // UID
+  scriptId: string;
+  sceneId: string;
+  role: string;                   // The user's chosen character
+  startedAt: string;
+  completedAt?: string;
+  transcript?: Array<{
+    ts: number;                   // timestamp seconds from start
+    text: string;                 // STT text
+  }>;
+  notes?: Array<{
+    lineId: string;
+    score: number;                // 0-1 similarity score
+    missed?: string[];            // missed words
+    paraphrased?: string[];       // detected paraphrases
+    pickupDelayMs?: number;       // time after cue
+    paceWpm?: number;             // words per minute
+    feedback?: string;            // human-readable summary
+  }>;
+};
+
+// Entitlements/plan
+export type Plan = {
+  id: string;                     // Usually "plan" or a subscription doc id
+  userId: string;
+  subscription?: {
+    active: boolean;
+    product?: string;            // e.g., "line-notes-monthly"
+    renewsAt?: string;
+  };
+  perScriptUnlocks?: string[];    // scriptIds with one-time purchase
 };

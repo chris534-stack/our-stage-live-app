@@ -1,8 +1,6 @@
-
-
 import { adminDb, admin } from './firebase-admin'; // Admin SDK for server-side functions
-import type { Event, Venue, EventStatus, NewsArticle, Review, UserProfile, CommunitySpotlight, ReviewerRequest } from './types';
-import { startOfToday, addDays } from 'date-fns';
+import type { Event, Venue, EventStatus, NewsArticle, Review, UserProfile, CommunitySpotlight, ReviewerRequest, EventOccurrence } from './types';
+import { startOfToday, addDays, endOfMonth } from 'date-fns';
 import type { UserRecord } from 'firebase-admin/auth';
 
 const parseDateString = (dateString: string): Date => {
@@ -10,6 +8,46 @@ const parseDateString = (dateString: string): Date => {
   // new Date('YYYY-MM-DD') can be interpreted as UTC midnight.
   const [year, month, day] = dateString.split('-').map(Number);
   return new Date(year, month - 1, day);
+};
+
+const compareOccurrencesAscending = (a: EventOccurrence, b: EventOccurrence): number => {
+    const timeA = parseDateString(a.date).getTime();
+    const timeB = parseDateString(b.date).getTime();
+    if (timeA === timeB) {
+        return (a.time || '').localeCompare(b.time || '');
+    }
+    return timeA - timeB;
+};
+
+const collectEventsWithinRange = (
+    events: Event[],
+    rangeStart: Date,
+    rangeEnd: Date
+): Event[] => {
+    return events
+        .map(event => {
+            const inRangeOccurrences = (event.occurrences || [])
+                .filter(occ => {
+                    try {
+                        const eventDate = parseDateString(occ.date);
+                        return eventDate >= rangeStart && eventDate <= rangeEnd;
+                    } catch (e) {
+                        return false;
+                    }
+                })
+                .sort(compareOccurrencesAscending);
+
+            if (inRangeOccurrences.length === 0) {
+                return null;
+            }
+
+            return {
+                ...event,
+                occurrences: inRangeOccurrences,
+            } as Event;
+        })
+        .filter((event): event is Event => event !== null)
+        .sort((a, b) => compareOccurrencesAscending(a.occurrences[0], b.occurrences[0]));
 };
 
 /**
@@ -61,12 +99,33 @@ export async function getAllVenues(): Promise<Venue[]> {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Venue));
 }
 
+/**
+ * [SERVER-SIDE] Checks if a venue exists by its document ID.
+ */
+export async function venueExists(venueId: string): Promise<boolean> {
+  if (!venueId) return false;
+  try {
+    const doc = await adminDb.collection('venues').doc(venueId).get();
+    return doc.exists;
+  } catch (err) {
+    console.error('venueExists failed:', err);
+    return false;
+  }
+}
+
 
 // --- Event Functions ---
 
 interface GetAllEventsOptions {
   includeOccurrences?: boolean;
 }
+
+// Events enriched with creator metadata for admin views
+export type EventWithCreator = Event & {
+  createdByName?: string;
+  createdByIsVenueRep?: boolean;
+  createdByEmail?: string;
+};
 
 /**
  * [SERVER-SIDE] Fetches all events using the Admin SDK.
@@ -101,6 +160,7 @@ export async function getAllEvents(options: GetAllEventsOptions = { includeOccur
       type: data.type,
       tags: data.tags || [],
       status: data.status,
+      createdBy: data.createdBy || '',
       url: data.url,
       occurrences: occurrences,
     } as Event;
@@ -118,6 +178,62 @@ export async function getAllEvents(options: GetAllEventsOptions = { includeOccur
   }
 
   return events;
+}
+
+/**
+ * [SERVER-SIDE] Fetches all events and enriches them with creator profile metadata.
+ * Adds createdByName, createdByIsVenueRep, and createdByEmail for admin display/filtering.
+ */
+export async function getAllEventsWithCreator(options: GetAllEventsOptions = { includeOccurrences: true }): Promise<EventWithCreator[]> {
+  // Fetch raw events first
+  const snapshot = await adminDb.collection('events').get();
+
+  const events: Event[] = snapshot.docs.map(doc => {
+    const data = doc.data() as any;
+    const occurrences = (options.includeOccurrences && data.occurrences)
+      ? data.occurrences.map((o: any) => ({ date: o.date, time: o.time || '' }))
+      : [];
+    return {
+      id: doc.id,
+      title: data.title,
+      description: data.description,
+      venueId: data.venueId,
+      type: data.type,
+      tags: data.tags || [],
+      status: data.status,
+      createdBy: data.createdBy || '',
+      url: data.url,
+      occurrences,
+    } as Event;
+  });
+
+  // Sort events by first occurrence date when included
+  if (options.includeOccurrences) {
+    events.sort((a, b) => {
+      if (!a.occurrences || a.occurrences.length === 0) return 1;
+      if (!b.occurrences || b.occurrences.length === 0) return -1;
+      const dateA = parseDateString(a.occurrences[0].date);
+      const dateB = parseDateString(b.occurrences[0].date);
+      return dateA.getTime() - dateB.getTime();
+    });
+  }
+
+  // Build creator metadata map from user profiles
+  const profiles = await getAllUserProfiles();
+  const profileById = new Map(profiles.map(p => [p.userId, p]));
+
+  // Enrich events with creator metadata
+  const enriched: EventWithCreator[] = events.map(e => {
+    const p = profileById.get(e.createdBy);
+    return {
+      ...e,
+      createdByName: p?.displayName || undefined,
+      createdByIsVenueRep: !!p?.isVenueRep,
+      createdByEmail: p?.email || undefined,
+    };
+  });
+
+  return enriched;
 }
 
 /**
@@ -152,49 +268,28 @@ export async function getFeaturedEventsFirestore(count: number): Promise<Event[]
     const approvedEvents = await getEventsByStatus("approved");
 
     const today = startOfToday();
+    const endOfCurrentMonth = endOfMonth(today);
     const thirtyDaysFromNow = addDays(today, 30);
 
-    const eventsWithUpcomingOccurrences = approvedEvents
-        .map(event => {
-            if (!event.occurrences || event.occurrences.length === 0) {
-                return null;
-            }
-            
-            const upcomingOccurrences = event.occurrences.filter(occ => {
-                try {
-                    const eventDate = parseDateString(occ.date);
-                    return eventDate >= today && eventDate <= thirtyDaysFromNow;
-                } catch (e) {
-                    return false;
-                }
-            });
+    const currentMonthEvents = collectEventsWithinRange(approvedEvents, today, endOfCurrentMonth);
 
-            if (upcomingOccurrences.length > 0) {
-                // Sort the occurrences for this event to find the soonest one
-                upcomingOccurrences.sort((a, b) => {
-                    const timeA = parseDateString(a.date).getTime();
-                    const timeB = parseDateString(b.date).getTime();
-                    if (timeA === timeB) {
-                        return (a.time || '').localeCompare(b.time || '');
-                    }
-                    return timeA - timeB;
-                });
-                // Return a new event object with only the upcoming occurrences
-                return { ...event, occurrences: upcomingOccurrences };
-            }
-            return null;
-        })
-        .filter((event): event is Event => event !== null);
+    if (currentMonthEvents.length >= count) {
+        return currentMonthEvents.slice(0, count);
+    }
 
-    // Sort the events themselves by their soonest upcoming occurrence
-    eventsWithUpcomingOccurrences.sort((a, b) => {
-        // We know occurrences exist and are sorted from the step above.
-        const firstDateA = parseDateString(a.occurrences[0].date);
-        const firstDateB = parseDateString(b.occurrences[0].date);
-        return firstDateA.getTime() - firstDateB.getTime();
-    });
+    const upcomingEvents = collectEventsWithinRange(approvedEvents, today, thirtyDaysFromNow);
+    const merged: Event[] = [...currentMonthEvents];
 
-    return eventsWithUpcomingOccurrences.slice(0, count);
+    for (const event of upcomingEvents) {
+        if (!merged.some(existing => existing.id === event.id)) {
+            merged.push(event);
+        }
+        if (merged.length >= count) {
+            break;
+        }
+    }
+
+    return merged.slice(0, count);
 }
 
 /**
@@ -409,7 +504,9 @@ export async function getAllUserProfiles(): Promise<UserProfile[]> {
             .filter(doc => {
                 const data = doc.data();
                 // Only include profiles with proper displayName
-                return data.displayName && data.displayName.trim() !== '';
+                const hasDisplayName = data.displayName && data.displayName.trim() !== '';
+                const isTest = !!data.isTest || (typeof data.email === 'string' && data.email.toLowerCase().endsWith('@example.com'));
+                return hasDisplayName && !isTest;
             })
             .map(doc => {
                 const data = doc.data();
@@ -425,6 +522,12 @@ export async function getAllUserProfiles(): Promise<UserProfile[]> {
                     coverPhotoUrl: data.coverPhotoUrl,
                     showEmail: data.showEmail || false,
                     authStatus: data.authStatus || 'active',
+                    isReviewer: !!data.isReviewer,
+                    isVenueRep: !!data.isVenueRep,
+                    assignedVenueIds: Array.isArray(data.assignedVenueIds) ? data.assignedVenueIds : [],
+                    hasSeenVenueRepIntro: !!data.hasSeenVenueRepIntro,
+                    venueRepOnboardingCompleted: !!data.venueRepOnboardingCompleted,
+                    isTest: !!data.isTest,
                 } as UserProfile;
             });
     } catch (error) {
@@ -451,7 +554,9 @@ export async function getUserProfileStats(): Promise<{
         // Filter out profiles that don't have proper displayName (these shouldn't be counted)
         const validProfiles = profilesSnapshot.docs.filter(doc => {
             const data = doc.data();
-            return data.displayName && data.displayName.trim() !== '';
+            const hasDisplayName = data.displayName && data.displayName.trim() !== '';
+            const isTest = !!data.isTest || (typeof data.email === 'string' && data.email.toLowerCase().endsWith('@example.com'));
+            return hasDisplayName && !isTest;
         });
         
         const totalUsers = validProfiles.length;
@@ -511,18 +616,25 @@ export async function getOrCreateUserProfile(userId: string): Promise<UserProfil
         // CASE 1: Profile document exists in Firestore.
         if (docSnap.exists) {
             const data = docSnap.data() || {};
+            const coverPhotoUrl = typeof data.coverPhotoUrl === 'string' && data.coverPhotoUrl.includes('placehold.co/1600x400')
+                ? ''
+                : (data.coverPhotoUrl || '');
+
             const profile: UserProfile = {
-                userId: data.userId || userId,
-                displayName: data.displayName || 'New User',
-                photoURL: data.photoURL || '',
-                email: data.email || '',
-                bio: data.bio || '',
+                userId,
+                displayName: data.displayName || userRecord?.displayName || 'New User',
+                photoURL: data.photoURL || userRecord?.photoURL || 'https://placehold.co/200x200.png',
+                email: data.email || userRecord?.email || '',
+                bio: data.bio || 'Welcome to the Our Stage community! Feel free to edit your profile and share a bit about yourself.',
                 roleInCommunity: data.roleInCommunity || 'Audience',
-                communityStartDate: String(data.communityStartDate || ''),
+                communityStartDate: data.communityStartDate || '',
                 galleryImageUrls: data.galleryImageUrls || [],
-                coverPhotoUrl: data.coverPhotoUrl || '',
+                coverPhotoUrl,
                 showEmail: data.showEmail || false,
                 authStatus: authStatus,
+                isReviewer: !!data.isReviewer,
+                isVenueRep: !!data.isVenueRep,
+                assignedVenueIds: Array.isArray(data.assignedVenueIds) ? data.assignedVenueIds : [],
             };
             return profile;
         }
@@ -538,9 +650,12 @@ export async function getOrCreateUserProfile(userId: string): Promise<UserProfil
                 roleInCommunity: 'Audience',
                 communityStartDate: '',
                 galleryImageUrls: [],
-                coverPhotoUrl: 'https://placehold.co/1600x400.png',
+                coverPhotoUrl: '',
                 showEmail: false,
                 authStatus: 'active',
+                isReviewer: false,
+                isVenueRep: false,
+                assignedVenueIds: [],
             };
             await docRef.set(newProfile);
             return newProfile;
