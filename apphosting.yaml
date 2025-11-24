@@ -58,11 +58,6 @@ env:
       - RUNTIME
   - variable: OPENAI_API_KEY
     secret: OPENAI_API_KEY
-  
-  # Secret for manually revalidating cached pages via /api/revalidate
-  # Generate a random secret and store it in Firebase secrets
-  - variable: REVALIDATE_SECRET
-    secret: REVALIDATE_SECRET
 
   # Gemini pricing (per 1M tokens). Tiered by prompt/output size: <=128k (LOW) and >128k (HIGH)
   - variable: GEMINI_FLASH_INPUT_LOW_USD_PER_MTOKENS
