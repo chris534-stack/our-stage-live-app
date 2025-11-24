@@ -9,17 +9,18 @@ import { HeroMembersButton } from '@/components/home/HeroMembersButton';
 type EventWithVenue = Event & { venue?: Venue };
 
 // Revalidate the homepage periodically in production so Featured events stay fresh
-// This uses ISR to rebuild the page at most every 30 minutes and also respects manual revalidatePath('/') calls
-export const revalidate = 1800; // seconds
+// In development, use dynamic rendering to always show current data
+// In production, rebuild the page at most every 5 minutes to ensure events stay current
+export const revalidate = process.env.NODE_ENV === 'development' ? 0 : 300; // seconds
 
 async function getFeaturedEvents(): Promise<EventWithVenue[]> {
   const [featured, allVenues] = await Promise.all([
     getFeaturedEventsFirestore(3),
     getAllVenues()
   ]);
-  
+
   const venuesMap = new Map<string, Venue>(allVenues.map(v => [v.id, v]));
-  
+
   return featured.map(event => ({
     ...event,
     venue: venuesMap.get(event.venueId)
@@ -41,10 +42,10 @@ export default async function Home() {
             {/* Keep hero centered but within left column; remove extra container wrapper */}
             <div className="mx-auto max-w-4xl rounded-2xl bg-primary p-8 md:p-12 text-center text-primary-foreground shadow-2xl">
               <div className="inline-block">
-                  <h1 className="text-4xl md:text-6xl font-bold font-headline mb-4 leading-tight">
+                <h1 className="text-4xl md:text-6xl font-bold font-headline mb-4 leading-tight">
                   Our Stage,<br />Eugene
-                  </h1>
-                  <div className="h-1.5 bg-accent w-1/2 mx-auto"></div>
+                </h1>
+                <div className="h-1.5 bg-accent w-1/2 mx-auto"></div>
               </div>
               <p className="text-md md:text-xl text-accent max-w-2xl mx-auto my-6">
                 Your one-stop resource for performances, auditions, workshops, and community connections in Eugene, Oregon.
@@ -61,7 +62,7 @@ export default async function Home() {
               <div className="text-center mb-8 md:mb-12">
                 <h2 className="text-3xl md:text-4xl font-bold font-headline text-primary">Featured This Month</h2>
               </div>
-              
+
               {/* Mobile: Horizontal scroll */}
               <div className="md:hidden">
                 <div className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide">
@@ -75,7 +76,7 @@ export default async function Home() {
                   <p className="text-sm text-muted-foreground">Swipe to see more events</p>
                 </div>
               </div>
-              
+
               {/* Desktop: Left-align tiles */}
               <div className="hidden md:flex flex-wrap justify-center gap-8">
                 {featuredEvents.map(event => (

@@ -4,10 +4,10 @@ import { startOfToday, addDays, endOfMonth } from 'date-fns';
 import type { UserRecord } from 'firebase-admin/auth';
 
 const parseDateString = (dateString: string): Date => {
-  // Manually parse date components to avoid timezone shift issues.
-  // new Date('YYYY-MM-DD') can be interpreted as UTC midnight.
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day);
+    // Manually parse date components to avoid timezone shift issues.
+    // new Date('YYYY-MM-DD') can be interpreted as UTC midnight.
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
 };
 
 const compareOccurrencesAscending = (a: EventOccurrence, b: EventOccurrence): number => {
@@ -95,36 +95,36 @@ function safeToISOString(dateValue: any): string {
  * [SERVER-SIDE] Fetches all venues using the Admin SDK.
  */
 export async function getAllVenues(): Promise<Venue[]> {
-  const snapshot = await adminDb.collection('venues').get();
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Venue));
+    const snapshot = await adminDb.collection('venues').get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Venue));
 }
 
 /**
  * [SERVER-SIDE] Checks if a venue exists by its document ID.
  */
 export async function venueExists(venueId: string): Promise<boolean> {
-  if (!venueId) return false;
-  try {
-    const doc = await adminDb.collection('venues').doc(venueId).get();
-    return doc.exists;
-  } catch (err) {
-    console.error('venueExists failed:', err);
-    return false;
-  }
+    if (!venueId) return false;
+    try {
+        const doc = await adminDb.collection('venues').doc(venueId).get();
+        return doc.exists;
+    } catch (err) {
+        console.error('venueExists failed:', err);
+        return false;
+    }
 }
 
 
 // --- Event Functions ---
 
 interface GetAllEventsOptions {
-  includeOccurrences?: boolean;
+    includeOccurrences?: boolean;
 }
 
 // Events enriched with creator metadata for admin views
 export type EventWithCreator = Event & {
-  createdByName?: string;
-  createdByIsVenueRep?: boolean;
-  createdByEmail?: string;
+    createdByName?: string;
+    createdByIsVenueRep?: boolean;
+    createdByEmail?: string;
 };
 
 /**
@@ -132,52 +132,52 @@ export type EventWithCreator = Event & {
  * Can optionally exclude the 'occurrences' field for performance.
  */
 export async function getAllEvents(options: GetAllEventsOptions = { includeOccurrences: true }): Promise<Event[]> {
-  let query = adminDb.collection('events').select(
-    'id', 'title', 'description', 'venueId', 'type', 'tags', 'status', 'url'
-  );
-
-  // Only add 'occurrences' to the select statement if needed
-  if (options.includeOccurrences) {
-    query = adminDb.collection('events').select(
-        'id', 'title', 'description', 'venueId', 'type', 'tags', 'status', 'url', 'occurrences'
+    let query = adminDb.collection('events').select(
+        'id', 'title', 'description', 'venueId', 'type', 'tags', 'status', 'url'
     );
-  }
 
-  const snapshot = await adminDb.collection('events').get();
-  
-  const events = snapshot.docs.map(doc => {
-    const data = doc.data();
-    // Defensively map occurrences to ensure time is always a string.
-    const occurrences = (options.includeOccurrences && data.occurrences) 
-      ? data.occurrences.map((o: any) => ({ date: o.date, time: o.time || '' })) 
-      : [];
+    // Only add 'occurrences' to the select statement if needed
+    if (options.includeOccurrences) {
+        query = adminDb.collection('events').select(
+            'id', 'title', 'description', 'venueId', 'type', 'tags', 'status', 'url', 'occurrences'
+        );
+    }
 
-    return {
-      id: doc.id,
-      title: data.title,
-      description: data.description,
-      venueId: data.venueId,
-      type: data.type,
-      tags: data.tags || [],
-      status: data.status,
-      createdBy: data.createdBy || '',
-      url: data.url,
-      occurrences: occurrences,
-    } as Event;
-  });
-  
-  // Sort events by the date of their first occurrence if available
-  if (options.includeOccurrences) {
-      events.sort((a, b) => {
-        if (!a.occurrences || a.occurrences.length === 0) return 1;
-        if (!b.occurrences || b.occurrences.length === 0) return -1;
-        const dateA = parseDateString(a.occurrences[0].date);
-        const dateB = parseDateString(b.occurrences[0].date);
-        return dateA.getTime() - dateB.getTime();
-      });
-  }
+    const snapshot = await adminDb.collection('events').get();
 
-  return events;
+    const events = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Defensively map occurrences to ensure time is always a string.
+        const occurrences = (options.includeOccurrences && data.occurrences)
+            ? data.occurrences.map((o: any) => ({ date: o.date, time: o.time || '' }))
+            : [];
+
+        return {
+            id: doc.id,
+            title: data.title,
+            description: data.description,
+            venueId: data.venueId,
+            type: data.type,
+            tags: data.tags || [],
+            status: data.status,
+            createdBy: data.createdBy || '',
+            url: data.url,
+            occurrences: occurrences,
+        } as Event;
+    });
+
+    // Sort events by the date of their first occurrence if available
+    if (options.includeOccurrences) {
+        events.sort((a, b) => {
+            if (!a.occurrences || a.occurrences.length === 0) return 1;
+            if (!b.occurrences || b.occurrences.length === 0) return -1;
+            const dateA = parseDateString(a.occurrences[0].date);
+            const dateB = parseDateString(b.occurrences[0].date);
+            return dateA.getTime() - dateB.getTime();
+        });
+    }
+
+    return events;
 }
 
 /**
@@ -185,55 +185,55 @@ export async function getAllEvents(options: GetAllEventsOptions = { includeOccur
  * Adds createdByName, createdByIsVenueRep, and createdByEmail for admin display/filtering.
  */
 export async function getAllEventsWithCreator(options: GetAllEventsOptions = { includeOccurrences: true }): Promise<EventWithCreator[]> {
-  // Fetch raw events first
-  const snapshot = await adminDb.collection('events').get();
+    // Fetch raw events first
+    const snapshot = await adminDb.collection('events').get();
 
-  const events: Event[] = snapshot.docs.map(doc => {
-    const data = doc.data() as any;
-    const occurrences = (options.includeOccurrences && data.occurrences)
-      ? data.occurrences.map((o: any) => ({ date: o.date, time: o.time || '' }))
-      : [];
-    return {
-      id: doc.id,
-      title: data.title,
-      description: data.description,
-      venueId: data.venueId,
-      type: data.type,
-      tags: data.tags || [],
-      status: data.status,
-      createdBy: data.createdBy || '',
-      url: data.url,
-      occurrences,
-    } as Event;
-  });
-
-  // Sort events by first occurrence date when included
-  if (options.includeOccurrences) {
-    events.sort((a, b) => {
-      if (!a.occurrences || a.occurrences.length === 0) return 1;
-      if (!b.occurrences || b.occurrences.length === 0) return -1;
-      const dateA = parseDateString(a.occurrences[0].date);
-      const dateB = parseDateString(b.occurrences[0].date);
-      return dateA.getTime() - dateB.getTime();
+    const events: Event[] = snapshot.docs.map(doc => {
+        const data = doc.data() as any;
+        const occurrences = (options.includeOccurrences && data.occurrences)
+            ? data.occurrences.map((o: any) => ({ date: o.date, time: o.time || '' }))
+            : [];
+        return {
+            id: doc.id,
+            title: data.title,
+            description: data.description,
+            venueId: data.venueId,
+            type: data.type,
+            tags: data.tags || [],
+            status: data.status,
+            createdBy: data.createdBy || '',
+            url: data.url,
+            occurrences,
+        } as Event;
     });
-  }
 
-  // Build creator metadata map from user profiles
-  const profiles = await getAllUserProfiles();
-  const profileById = new Map(profiles.map(p => [p.userId, p]));
+    // Sort events by first occurrence date when included
+    if (options.includeOccurrences) {
+        events.sort((a, b) => {
+            if (!a.occurrences || a.occurrences.length === 0) return 1;
+            if (!b.occurrences || b.occurrences.length === 0) return -1;
+            const dateA = parseDateString(a.occurrences[0].date);
+            const dateB = parseDateString(b.occurrences[0].date);
+            return dateA.getTime() - dateB.getTime();
+        });
+    }
 
-  // Enrich events with creator metadata
-  const enriched: EventWithCreator[] = events.map(e => {
-    const p = profileById.get(e.createdBy);
-    return {
-      ...e,
-      createdByName: p?.displayName || undefined,
-      createdByIsVenueRep: !!p?.isVenueRep,
-      createdByEmail: p?.email || undefined,
-    };
-  });
+    // Build creator metadata map from user profiles
+    const profiles = await getAllUserProfiles();
+    const profileById = new Map(profiles.map(p => [p.userId, p]));
 
-  return enriched;
+    // Enrich events with creator metadata
+    const enriched: EventWithCreator[] = events.map(e => {
+        const p = profileById.get(e.createdBy);
+        return {
+            ...e,
+            createdByName: p?.displayName || undefined,
+            createdByIsVenueRep: !!p?.isVenueRep,
+            createdByEmail: p?.email || undefined,
+        };
+    });
+
+    return enriched;
 }
 
 /**
@@ -245,7 +245,7 @@ export async function getEventsByStatus(status: EventStatus): Promise<Event[]> {
     const events = snapshot.docs.map(doc => {
         const data = doc.data();
         // Defensively map occurrences to ensure time is always a string.
-        const occurrences = (data.occurrences || []).map((o: any) => ({ date: o.date, time: o.time || ''}));
+        const occurrences = (data.occurrences || []).map((o: any) => ({ date: o.date, time: o.time || '' }));
         return { id: doc.id, ...data, tags: data.tags || [], occurrences } as Event
     });
 
@@ -271,7 +271,22 @@ export async function getFeaturedEventsFirestore(count: number): Promise<Event[]
     const endOfCurrentMonth = endOfMonth(today);
     const thirtyDaysFromNow = addDays(today, 30);
 
+    // Debug logging to verify date filtering
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[getFeaturedEventsFirestore] Today:', today.toISOString());
+        console.log('[getFeaturedEventsFirestore] End of month:', endOfCurrentMonth.toISOString());
+        console.log('[getFeaturedEventsFirestore] 30 days from now:', thirtyDaysFromNow.toISOString());
+        console.log('[getFeaturedEventsFirestore] Total approved events:', approvedEvents.length);
+    }
+
     const currentMonthEvents = collectEventsWithinRange(approvedEvents, today, endOfCurrentMonth);
+
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[getFeaturedEventsFirestore] Current month events:', currentMonthEvents.length);
+        currentMonthEvents.forEach(e => {
+            console.log(`  - ${e.title}: ${e.occurrences?.[0]?.date}`);
+        });
+    }
 
     if (currentMonthEvents.length >= count) {
         return currentMonthEvents.slice(0, count);
@@ -289,6 +304,13 @@ export async function getFeaturedEventsFirestore(count: number): Promise<Event[]
         }
     }
 
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[getFeaturedEventsFirestore] Final merged events:', merged.length);
+        merged.forEach(e => {
+            console.log(`  - ${e.title}: ${e.occurrences?.[0]?.date}`);
+        });
+    }
+
     return merged.slice(0, count);
 }
 
@@ -296,22 +318,22 @@ export async function getFeaturedEventsFirestore(count: number): Promise<Event[]
  * [SERVER-SIDE] Adds a new event document using the Admin SDK.
  */
 export async function addEvent(eventData: Omit<Event, 'id'>): Promise<Event> {
-  const docRef = await adminDb.collection('events').add(eventData);
-  return { id: docRef.id, ...eventData };
+    const docRef = await adminDb.collection('events').add(eventData);
+    return { id: docRef.id, ...eventData };
 }
 
 /**
  * [SERVER-SIDE] Checks if an event already exists using the Admin SDK.
  */
 export async function eventExists(title: string, venueId: string): Promise<boolean> {
-  if (!venueId) return false;
+    if (!venueId) return false;
 
-  const q = adminDb.collection('events')
-    .where('title', '==', title)
-    .where('venueId', '==', venueId);
-  
-  const snapshot = await q.count().get();
-  return snapshot.data().count > 0;
+    const q = adminDb.collection('events')
+        .where('title', '==', title)
+        .where('venueId', '==', venueId);
+
+    const snapshot = await q.count().get();
+    return snapshot.data().count > 0;
 }
 
 
@@ -324,8 +346,8 @@ export async function addNewsArticle(articleData: Omit<NewsArticle, 'id'>): Prom
     const doc = await docRef.get();
     const data = doc.data();
 
-    return { 
-        id: doc.id, 
+    return {
+        id: doc.id,
         ...data,
         createdAt: safeToISOString(data?.createdAt),
     } as NewsArticle;
@@ -336,7 +358,7 @@ export async function addNewsArticle(articleData: Omit<NewsArticle, 'id'>): Prom
  */
 export async function getAllNewsArticles(): Promise<NewsArticle[]> {
     const snapshot = await adminDb.collection('news').get();
-    
+
     const articles = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -404,9 +426,9 @@ function sanitizeReview(doc: admin.firestore.DocumentSnapshot): Review {
 // Helper function to find a suitable event for the mock review
 function findEventForMockReview(events: Event[]): Event | null {
     const today = startOfToday();
-    
+
     // Priority 1: Find a completed, approved, non-audition event
-    const pastEvent = events.find(e => 
+    const pastEvent = events.find(e =>
         e.status === 'approved' &&
         e.type.toLowerCase() !== 'audition' &&
         e.occurrences?.length > 0 &&
@@ -425,8 +447,8 @@ function findEventForMockReview(events: Event[]): Event | null {
 
 // Helper function to create the mock review
 function createMockReview(event: Event): Review {
-     const performanceDate = event.occurrences?.[0]?.date || new Date().toISOString().split('T')[0];
-     return {
+    const performanceDate = event.occurrences?.[0]?.date || new Date().toISOString().split('T')[0];
+    return {
         id: 'mock-review-1',
         showId: event.id,
         showTitle: event.title,
@@ -454,20 +476,20 @@ function createMockReview(event: Event): Review {
  * [SERVER-SIDE] Fetches all reviews using the Admin SDK, sorted by creation date.
  */
 export async function getAllReviews(): Promise<Review[]> {
-  const snapshot = await adminDb.collection('reviews').orderBy('createdAt', 'desc').get();
-  const reviews = snapshot.docs.map(sanitizeReview);
-  
-  // If no real reviews exist, create a mock one for demonstration.
-  if (reviews.length === 0) {
-      // Find a past event to attach the mock review to
-      const allEvents = await getAllEvents({ includeOccurrences: true });
-      const eventForMock = findEventForMockReview(allEvents);
-      if (eventForMock) {
-          reviews.push(createMockReview(eventForMock));
-      }
-  }
+    const snapshot = await adminDb.collection('reviews').orderBy('createdAt', 'desc').get();
+    const reviews = snapshot.docs.map(sanitizeReview);
 
-  return reviews;
+    // If no real reviews exist, create a mock one for demonstration.
+    if (reviews.length === 0) {
+        // Find a past event to attach the mock review to
+        const allEvents = await getAllEvents({ includeOccurrences: true });
+        const eventForMock = findEventForMockReview(allEvents);
+        if (eventForMock) {
+            reviews.push(createMockReview(eventForMock));
+        }
+    }
+
+    return reviews;
 }
 
 
@@ -478,7 +500,7 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
     const snapshot = await adminDb.collection('reviews')
         .where('reviewerId', '==', userId)
         .get();
-        
+
     const reviews = snapshot.docs.map(sanitizeReview);
 
     // Sort in-code to avoid needing a composite index in Firestore.
@@ -499,7 +521,7 @@ export async function getAllUserProfiles(): Promise<UserProfile[]> {
         const snapshot = await adminDb.collection('userProfiles')
             .orderBy('displayName')
             .get();
-        
+
         return snapshot.docs
             .filter(doc => {
                 const data = doc.data();
@@ -550,7 +572,7 @@ export async function getUserProfileStats(): Promise<{
             adminDb.collection('userProfiles').get(),
             adminDb.collection('reviewerRequests').where('status', '==', 'approved').get()
         ]);
-        
+
         // Filter out profiles that don't have proper displayName (these shouldn't be counted)
         const validProfiles = profilesSnapshot.docs.filter(doc => {
             const data = doc.data();
@@ -558,18 +580,18 @@ export async function getUserProfileStats(): Promise<{
             const isTest = !!data.isTest || (typeof data.email === 'string' && data.email.toLowerCase().endsWith('@example.com'));
             return hasDisplayName && !isTest;
         });
-        
+
         const totalUsers = validProfiles.length;
         const activeUsers = validProfiles.filter(doc => {
             const data = doc.data();
             return data.authStatus !== 'notFound';
         }).length;
-        
+
         const reviewers = reviewerRequestsSnapshot.size;
-        
+
         // Set admin count to 1 (just you for now)
         const admins = 1;
-        
+
         return {
             totalUsers,
             activeUsers,
@@ -682,11 +704,11 @@ export async function getActiveSpotlight(): Promise<CommunitySpotlight | null> {
             .where('isActive', '==', true)
             .limit(1)
             .get();
-        
+
         if (snapshot.empty) {
             return null;
         }
-        
+
         if (!snapshot.empty) {
             const doc = snapshot.docs[0];
             try {
@@ -709,7 +731,7 @@ export async function getActiveSpotlight(): Promise<CommunitySpotlight | null> {
                 return null;
             }
         }
-        
+
         return null;
     } catch (error) {
         console.error('Error fetching active spotlight:', error);
@@ -725,7 +747,7 @@ export async function getAllSpotlights(): Promise<CommunitySpotlight[]> {
         const snapshot = await adminDb.collection('communitySpotlights')
             .orderBy('createdAt', 'desc')
             .get();
-        
+
         return snapshot.docs.map(doc => {
             try {
                 const data = doc.data();
@@ -775,20 +797,20 @@ export async function createSpotlight(spotlightData: Omit<CommunitySpotlight, 'i
             const activeSpotlights = await adminDb.collection('communitySpotlights')
                 .where('isActive', '==', true)
                 .get();
-            
+
             const batch = adminDb.batch();
             activeSpotlights.docs.forEach(doc => {
                 batch.update(doc.ref, { isActive: false });
             });
             await batch.commit();
         }
-        
+
         // Create the new spotlight
         const docRef = await adminDb.collection('communitySpotlights').add({
             ...spotlightData,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        
+
         // Return the created spotlight with current timestamp
         // Note: We use current time instead of reading back the serverTimestamp
         // to avoid the "invalid uint 32: NaN" error that occurs when serverTimestamp
@@ -821,7 +843,7 @@ export async function updateSpotlight(id: string, updates: Partial<Omit<Communit
             const activeSpotlights = await adminDb.collection('communitySpotlights')
                 .where('isActive', '==', true)
                 .get();
-            
+
             const batch = adminDb.batch();
             activeSpotlights.docs.forEach(doc => {
                 if (doc.id !== id) { // Don't deactivate the one we're updating
@@ -830,7 +852,7 @@ export async function updateSpotlight(id: string, updates: Partial<Omit<Communit
             });
             await batch.commit();
         }
-        
+
         // Update the spotlight
         await adminDb.collection('communitySpotlights').doc(id).update(updates);
         return true;
@@ -864,7 +886,7 @@ export async function getAllReviewerRequests(): Promise<ReviewerRequest[]> {
         const snapshot = await adminDb.collection('reviewerRequests')
             .orderBy('createdAt', 'desc')
             .get();
-        
+
         return snapshot.docs.map(doc => {
             const data = doc.data();
             return {
@@ -928,7 +950,7 @@ export async function getAnalyticsData(): Promise<{
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
         const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
-        
+
         // Get all collections data
         const [usersSnapshot, eventsSnapshot, reviewsSnapshot] = await Promise.all([
             adminDb.collection('userProfiles').get(),
@@ -946,7 +968,7 @@ export async function getAnalyticsData(): Promise<{
         const eventsThisMonth = eventsSnapshot.docs.filter(doc => {
             const data = doc.data();
             if (!data.occurrences || !Array.isArray(data.occurrences)) return false;
-            
+
             return data.occurrences.some((occurrence: any) => {
                 if (!occurrence.date) return false;
                 const eventDate = new Date(occurrence.date);
@@ -962,16 +984,16 @@ export async function getAnalyticsData(): Promise<{
         for (let i = 5; i >= 0; i--) {
             const monthDate = new Date(currentYear, currentMonth - i, 1);
             const nextMonthDate = new Date(currentYear, currentMonth - i + 1, 1);
-            
+
             const usersInMonth = usersSnapshot.docs.filter(doc => {
                 const data = doc.data();
                 if (!data.displayName || data.displayName.trim() === '') return false;
-                
+
                 // For now, we'll simulate growth since we don't have creation dates
                 // In a real scenario, you'd filter by user creation date
                 return true;
             }).length;
-            
+
             userGrowth.push({
                 month: monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
                 users: Math.max(1, Math.floor(usersInMonth * (0.7 + (i * 0.05)))) // Simulate growth
@@ -980,12 +1002,12 @@ export async function getAnalyticsData(): Promise<{
 
         // Get popular events (by number of reviews)
         const eventReviewCounts = new Map<string, { title: string; count: number }>();
-        
+
         reviewsSnapshot.docs.forEach(doc => {
             const data = doc.data();
             const showId = data.showId;
             const showTitle = data.showTitle || 'Unknown Event';
-            
+
             if (showId) {
                 const current = eventReviewCounts.get(showId) || { title: showTitle, count: 0 };
                 eventReviewCounts.set(showId, { title: showTitle, count: current.count + 1 });
@@ -1002,15 +1024,15 @@ export async function getAnalyticsData(): Promise<{
         for (let i = 5; i >= 0; i--) {
             const monthDate = new Date(currentYear, currentMonth - i, 1);
             const nextMonthDate = new Date(currentYear, currentMonth - i + 1, 1);
-            
+
             const reviewsInMonth = reviewsSnapshot.docs.filter(doc => {
                 const data = doc.data();
                 if (!data.createdAt) return false;
-                
+
                 const reviewDate = new Date(data.createdAt);
                 return reviewDate >= monthDate && reviewDate < nextMonthDate;
             }).length;
-            
+
             reviewActivity.push({
                 month: monthDate.toLocaleDateString('en-US', { month: 'short' }),
                 reviews: reviewsInMonth
@@ -1062,7 +1084,7 @@ export async function getReviewerRequestsByStatus(status: 'pending' | 'approved'
             .where('status', '==', status)
             .orderBy('createdAt', 'desc')
             .get();
-        
+
         return snapshot.docs.map(doc => {
             const data = doc.data();
             return {
@@ -1090,9 +1112,9 @@ export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: n
         const profilesSnapshot = await adminDb.collection('userProfiles')
             .where('isReviewer', '==', true)
             .get();
-        
+
         console.log('getAllReviewers: Query completed, found', profilesSnapshot.docs.length, 'documents');
-        
+
         const reviewers = profilesSnapshot.docs.map(doc => {
             const data = doc.data();
             console.log('getAllReviewers: Processing doc', doc.id, 'with isReviewer:', data.isReviewer);
@@ -1115,7 +1137,7 @@ export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: n
                 authStatus: data.authStatus
             } as UserProfile & { reviewCount: number; lastReviewDate?: string; createdAt?: string };
         });
-        
+
         // Get Firebase Auth account creation dates and review statistics for each reviewer
         for (const reviewer of reviewers) {
             try {
@@ -1128,14 +1150,14 @@ export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: n
                     console.error(`Error fetching auth data for reviewer ${reviewer.userId}:`, authError);
                     reviewer.createdAt = undefined;
                 }
-                
+
                 // Fetch review statistics
                 const reviewsSnapshot = await adminDb.collection('reviews')
                     .where('reviewerId', '==', reviewer.userId)
                     .get();
-                
+
                 reviewer.reviewCount = reviewsSnapshot.docs.length;
-                
+
                 if (reviewsSnapshot.docs.length > 0) {
                     // Sort reviews by createdAt in memory to avoid needing a composite index
                     const sortedReviews = reviewsSnapshot.docs.sort((a, b) => {
@@ -1144,7 +1166,7 @@ export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: n
                         // Sort descending (newest first)
                         return dateB.localeCompare(dateA);
                     });
-                    
+
                     const lastReview = sortedReviews[0].data();
                     reviewer.lastReviewDate = safeToISOString(lastReview.createdAt);
                 }
@@ -1156,7 +1178,7 @@ export async function getAllReviewers(): Promise<(UserProfile & { reviewCount: n
                 reviewer.createdAt = undefined;
             }
         }
-        
+
         // Sort reviewers by display name
         return reviewers.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
     } catch (error) {
@@ -1181,15 +1203,15 @@ export async function getReviewerStats(): Promise<{
             adminDb.collection('reviews').get(),
             adminDb.collection('reviewerRequests').where('status', '==', 'pending').get()
         ]);
-        
+
         const totalReviewers = reviewersSnapshot.docs.length;
         const totalReviews = reviewsSnapshot.docs.length;
         const pendingApplications = pendingRequestsSnapshot.docs.length;
-        
+
         // Count active reviewers (those who have written at least one review)
         const reviewerIds = new Set(reviewsSnapshot.docs.map(doc => doc.data().reviewerId));
         const activeReviewers = reviewerIds.size;
-        
+
         // Count reviews this month
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1197,7 +1219,7 @@ export async function getReviewerStats(): Promise<{
             const reviewDate = new Date(doc.data().createdAt);
             return reviewDate >= startOfMonth;
         }).length;
-        
+
         return {
             totalReviewers,
             activeReviewers,
@@ -1226,7 +1248,7 @@ export async function getReviewsByReviewer(reviewerId: string): Promise<Review[]
             .where('reviewerId', '==', reviewerId)
             .orderBy('createdAt', 'desc')
             .get();
-        
+
         return snapshot.docs.map(sanitizeReview);
     } catch (error) {
         console.error('Error fetching reviews by reviewer:', error);

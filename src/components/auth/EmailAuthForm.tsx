@@ -43,7 +43,7 @@ export default function EmailAuthForm({ onSignedIn, onError, defaultEmail, class
       if (!isSignInWithEmailLink(auth, window.location.href)) return;
 
       // Try to get email from localStorage (set when sending link)
-      const storedEmail = window.localStorage.getItem('emailForSignIn');
+      const storedEmail = typeof window !== 'undefined' ? window.localStorage.getItem('emailForSignIn') : null;
       if (storedEmail) {
         setEmail(storedEmail);
       } else {

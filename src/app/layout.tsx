@@ -21,13 +21,13 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <AuthProvider>
-            <div className="relative flex min-h-screen flex-col bg-background">
-              <Header />
-              <main className="flex flex-col flex-1">{children}</main>
-              <Footer />
-            </div>
-            <MobileNav />
-            <Toaster />
+          <div className="relative flex min-h-screen flex-col bg-background">
+            <Header />
+            <main className="flex flex-col flex-1">{children}</main>
+            <Footer />
+          </div>
+          <MobileNav />
+          <Toaster />
         </AuthProvider>
       </body>
     </html>
