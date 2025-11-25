@@ -11,7 +11,7 @@ type EventWithVenue = Event & { venue?: Venue };
 // Revalidate the homepage periodically in production so Featured events stay fresh
 // In development, use dynamic rendering to always show current data
 // In production, rebuild the page at most every 5 minutes to ensure events stay current
-export const revalidate = process.env.NODE_ENV === 'development' ? 0 : 300; // seconds
+export const revalidate = 300; // seconds
 
 async function getFeaturedEvents(): Promise<EventWithVenue[]> {
   const [featured, allVenues] = await Promise.all([
