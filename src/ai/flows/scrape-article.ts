@@ -8,8 +8,8 @@
  * - ScrapeArticleOutput - The return type for the scrapeArticle function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
 const ScrapeArticleInputSchema = z.object({
     url: z.string().url().describe('The URL of the news article to scrape.'),
@@ -27,13 +27,34 @@ export async function scrapeArticle(input: ScrapeArticleInput): Promise<ScrapeAr
     return scrapeArticleFlow(input);
 }
 
+import { extractArticleFromUrl } from '@/lib/html-extract';
+
+const ScrapeArticlePromptInputSchema = z.object({
+    url: z.string().url(),
+    content: z.string().optional(),
+    extractedTitle: z.string().optional(),
+});
+
 const scrapeArticlePrompt = ai.definePrompt({
     name: 'scrapeArticlePrompt',
-    input: {schema: ScrapeArticleInputSchema},
-    output: {schema: ScrapeArticleOutputSchema},
-    prompt: `You are an expert at extracting key information from online news articles and reviews. Analyze the content at the given URL.
-
+    input: { schema: ScrapeArticlePromptInputSchema },
+    output: { schema: ScrapeArticleOutputSchema },
+    prompt: `You are an expert at extracting key information from online news articles and reviews.
+    
 URL: {{{url}}}
+
+{{#if extractedTitle}}
+Page Title: {{{extractedTitle}}}
+{{/if}}
+
+{{#if content}}
+Below is the text content extracted from the page. Use this content to answer the questions.
+---
+{{{content}}}
+---
+{{else}}
+(No content could be extracted directly. Please try to infer from the URL or any knowledge you have.)
+{{/if}}
 
 From the article, please extract the following information and provide it in a structured JSON format:
 
@@ -43,16 +64,31 @@ From the article, please extract the following information and provide it in a s
 });
 
 const scrapeArticleFlow = ai.defineFlow(
-{
-    name: 'scrapeArticleFlow',
-    inputSchema: ScrapeArticleInputSchema,
-    outputSchema: ScrapeArticleOutputSchema,
-},
-async input => {
-    const {output} = await scrapeArticlePrompt(input);
-    if (!output) {
-        throw new Error('AI model did not return a valid output.');
+    {
+        name: 'scrapeArticleFlow',
+        inputSchema: ScrapeArticleInputSchema,
+        outputSchema: ScrapeArticleOutputSchema,
+    },
+    async input => {
+        // Fetch content server-side to simulate "browsing"
+        const extracted = await extractArticleFromUrl(input.url);
+
+        const promptInput = {
+            url: input.url,
+            content: extracted?.content,
+            extractedTitle: extracted?.title,
+        };
+
+        const { output } = await scrapeArticlePrompt(promptInput);
+        if (!output) {
+            throw new Error('AI model did not return a valid output.');
+        }
+
+        // Fallback: if AI didn't find an image but our extractor did, use it
+        if (!output.imageUrl && extracted?.imageUrl) {
+            output.imageUrl = extracted.imageUrl;
+        }
+
+        return output;
     }
-    return output;
-}
 );

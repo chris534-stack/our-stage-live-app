@@ -341,3 +341,48 @@ export async function extractEventFromUrl(url: string): Promise<ScrapeEventDetai
 
   return result;
 }
+export async function extractArticleFromUrl(url: string): Promise<{ title?: string; content: string; description?: string; imageUrl?: string } | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; OurStageScraper/1.0; +https://ourstage.live)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      next: { revalidate: 3600 }, // Cache for 1 hour
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const $ = load(html);
+
+    const title = pickTitle($);
+    const description = pickDescription($);
+    const imageUrl = $('meta[property="og:image"]').attr('content') || $('meta[name="twitter:image"]').attr('content');
+
+    // Extract main content
+    // Remove clutter
+    $('script, style, nav, footer, header, aside, .ad, .advertisement, .social-share, .menu').remove();
+
+    let content = '';
+    const article = $('article').first();
+    const main = $('main').first();
+    const root = article.length ? article : (main.length ? main : $('body'));
+
+    // Collect paragraphs and headers
+    root.find('p, h1, h2, h3, h4, h5, h6, li').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text.length > 20) { // Filter out short snippets
+        content += text + '\n\n';
+      }
+    });
+
+    return {
+      title,
+      description,
+      imageUrl,
+      content: content.trim() || description || '',
+    };
+  } catch (e) {
+    console.error('Error extracting article:', e);
+    return null;
+  }
+}
