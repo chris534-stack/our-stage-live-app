@@ -5,19 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processScriptImages } from '@/lib/script-ocr';
-import { getFirestore } from 'firebase-admin/firestore';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { adminDb } from '@/lib/firebase-admin';
 
-// Initialize Firebase Admin
-if (getApps().length === 0) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,21 +31,21 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[OCR] Processing ${files.length} images for user ${userId}`);
-    
+
     // Check for duplicates by comparing first 100 chars of first image
     const firstImageBuffer = Buffer.from(await files[0].arrayBuffer());
     const imageHash = require('crypto')
       .createHash('md5')
       .update(firstImageBuffer)
       .digest('hex');
-    
-    const db = getFirestore();
+
+    const db = adminDb;
     const existingScripts = await db
       .collection(`users/${userId}/scripts`)
       .where('imageHash', '==', imageHash)
       .limit(1)
       .get();
-    
+
     if (!existingScripts.empty) {
       const existing = existingScripts.docs[0];
       console.log(`[OCR] Duplicate detected: ${existing.id}`);
@@ -89,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Save to Firestore
     const scriptRef = db.collection(`users/${userId}/scripts`).doc();
-    
+
     await scriptRef.set({
       title: scriptTitle,
       uploadedAt: new Date(),
@@ -103,10 +93,10 @@ export async function POST(request: NextRequest) {
 
     // Save scenes as subcollection
     const batch = db.batch();
-    
+
     ocrResult.scenes.forEach((scene, index) => {
       const sceneRef = scriptRef.collection('scenes').doc();
-      
+
       // Count lines for this user (we'll let them select their character later)
       batch.set(sceneRef, {
         sceneNumber: scene.sceneNumber,
