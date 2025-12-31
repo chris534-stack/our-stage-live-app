@@ -19,8 +19,14 @@ export function revalidatePath(path: string): any {
     return; // no-op in tests if not explicitly overridden
   }
   try {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[cache] Revalidating path: ${path}`);
+    }
     return nextRevalidatePath(path);
-  } catch (_err) {
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error(`[cache] Failed to revalidate path: ${path}`, err);
+    }
     // Swallow in non-test defensive case to avoid crashing callers
     return;
   }

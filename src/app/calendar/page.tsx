@@ -1,6 +1,6 @@
 
 import { EventCalendar } from '@/components/calendar/EventCalendar';
-import { getEventsByStatus, getAllVenues, getAllReviews } from '@/lib/data';
+import { getEventsByStatus, getAllVenues, getAllReviews, enrichEventsWithVenues } from '@/lib/data';
 import type { Venue, ExpandedCalendarEvent, Review } from '@/lib/types';
 
 async function getCalendarData(): Promise<{ events: ExpandedCalendarEvent[], venues: Venue[] }> {
@@ -10,7 +10,7 @@ async function getCalendarData(): Promise<{ events: ExpandedCalendarEvent[], ven
     getAllReviews(),
   ]);
 
-  const venuesMap = new Map<string, Venue>(allVenues.map(v => [v.id, v]));
+  const enrichedEvents = enrichEventsWithVenues(approvedEvents, allVenues);
 
   // Group reviews by showId for efficient lookup
   const reviewsByShowId = new Map<string, Review[]>();
@@ -20,10 +20,10 @@ async function getCalendarData(): Promise<{ events: ExpandedCalendarEvent[], ven
     }
     reviewsByShowId.get(review.showId)!.push(review);
   });
-  
+
   const expandedEventsMap = new Map<string, ExpandedCalendarEvent>();
 
-  approvedEvents.forEach(event => {
+  enrichedEvents.forEach(event => {
     if (!event.occurrences || event.occurrences.length === 0) {
       return;
     }
@@ -48,7 +48,6 @@ async function getCalendarData(): Promise<{ events: ExpandedCalendarEvent[], ven
         uniqueOccurrenceId,
         date: occurrence.date,
         time: occurrence.time,
-        venue: venuesMap.get(event.venueId),
         reviews: eventReviews,
       });
     });

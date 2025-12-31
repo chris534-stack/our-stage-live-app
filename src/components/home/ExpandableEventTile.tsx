@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { MapPin, Ticket, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
-import { cn, toTitleCase } from '@/lib/utils';
+import { cn, toTitleCase, getVenueColor } from '@/lib/utils';
 import { format } from 'date-fns';
 import type { Event, Venue, EventOccurrence } from '@/lib/types';
 import Link from 'next/link';
@@ -46,7 +46,7 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
   const hasTags = event.tags && event.tags.length > 0;
 
   return (
-    <Card 
+    <Card
       className={cn(
         "flex flex-col transition-all duration-500 ease-in-out shadow-lg hover:shadow-xl flex-shrink-0",
         "w-80", // Static width
@@ -54,7 +54,7 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
         !isExpanded && (hasTags ? "h-[320px]" : "h-[280px]"),
         isExpanded && "w-96 min-h-[450px] h-auto" // Expanded: wider with min-height, grows to fit content
       )}
-      style={{ borderLeft: `4px solid ${event.venue?.color || 'hsl(var(--primary))'}` }}
+      style={{ borderLeft: `4px solid ${getVenueColor(event.venue?.color)}` }}
     >
       <div onClick={handleToggleExpand} className="cursor-pointer flex-grow">
         <CardHeader>
@@ -78,9 +78,9 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
                 )}
               </CardDescription>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              variant="ghost"
+              size="icon"
               className="h-8 w-8 flex-shrink-0 transition-transform duration-500 ease-in-out"
               style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
             >
@@ -89,7 +89,7 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
             </Button>
           </div>
         </CardHeader>
-        
+
         <CardContent className="relative pt-0 pb-4">
           {/* Tags */}
           {event.tags && event.tags.length > 0 && (
@@ -101,7 +101,7 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
               ))}
             </div>
           )}
-          
+
           {/* Description */}
           <p className={cn(
             "text-sm text-muted-foreground transition-all duration-500 ease-in-out",
@@ -109,19 +109,19 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
           )}>
             {event.description}
           </p>
-          
+
           {/* Gradient overlay for collapsed state */}
           {!isExpanded && event.description && (
             <div className="absolute bottom-4 left-0 right-0 h-8 bg-gradient-to-t from-card to-transparent pointer-events-none" />
           )}
-          
+
           {/* Expanded content */}
           <div className={cn(
             "w-full transition-all duration-300 ease-in-out overflow-hidden",
             isExpanded ? "max-h-96 opacity-100 mt-4" : "max-h-0 opacity-0"
           )}>
             <Separator className="mb-4" />
-            
+
             {/* Additional occurrences */}
             {additionalOccurrences.length > 0 && (
               <div className="mb-4">
@@ -136,7 +136,7 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
                 </div>
               </div>
             )}
-            
+
             {/* Event type */}
             {event.type && (
               <div className="mb-3">
@@ -149,15 +149,15 @@ export function ExpandableEventTile({ event }: ExpandableEventTileProps) {
           </div>
         </CardContent>
       </div>
-      
+
       <CardFooter className="pt-0">
         <div className="flex w-full items-center justify-center gap-2">
           {event.url && (
             <Button variant="link" size="sm" asChild className="p-1 h-6 text-xs">
-              <a 
-                href={event.url} 
-                target="_blank" 
-                rel="noopener noreferrer" 
+              <a
+                href={event.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="flex items-center gap-1"
               >

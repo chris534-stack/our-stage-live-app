@@ -10,7 +10,7 @@ import Timeline, {
 } from 'react-calendar-timeline';
 import 'react-calendar-timeline/dist/style.css';
 import moment from 'moment';
-import { cn } from '@/lib/utils';
+import { cn, getVenueColor } from '@/lib/utils';
 import { Event, Venue } from '@/lib/types';
 
 // --- Types ---
@@ -28,7 +28,7 @@ export function TheatreTimeline({ className, events, venues }: TheatreTimelinePr
         return venues.map(v => ({
             id: v.id,
             title: v.name,
-            bgColor: v.color, // Custom property we can use in rendering if needed
+            bgColor: getVenueColor(v.color), // Custom property we can use in rendering if needed
         }));
     }, [venues]);
 
@@ -57,7 +57,7 @@ export function TheatreTimeline({ className, events, venues }: TheatreTimelinePr
                     itemProps: {
                         // Custom styles for the item container
                         style: {
-                            background: venue?.color || '#888',
+                            background: getVenueColor(venue?.color),
                             borderStyle: 'none',
                             borderWidth: 0,
                             borderRadius: '4px',

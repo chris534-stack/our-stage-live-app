@@ -88,6 +88,20 @@ function safeToISOString(dateValue: any): string {
     return new Date(0).toISOString();
 }
 
+/**
+ * [SERVER-SIDE] Enriches a list of items having a venueId with their corresponding Venue object.
+ */
+export function enrichEventsWithVenues<T extends { venueId: string }>(
+    items: T[],
+    venues: Venue[]
+): (T & { venue?: Venue })[] {
+    const venueMap = new Map(venues.map(v => [v.id, v]));
+    return items.map(item => ({
+        ...item,
+        venue: venueMap.get(item.venueId)
+    }));
+}
+
 
 // --- Venue Functions ---
 

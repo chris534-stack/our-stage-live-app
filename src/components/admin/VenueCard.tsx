@@ -28,6 +28,7 @@ import { deleteVenueAction } from '@/lib/actions';
 import { Edit, Trash2 } from 'lucide-react';
 import { VenueEditorForm } from './VenueEditorForm';
 import { getClientAuth } from '@/lib/firebase';
+import { getVenueColor } from '@/lib/utils';
 
 export function VenueCard({ venue }: { venue: Venue }) {
   const { toast } = useToast();
@@ -55,7 +56,7 @@ export function VenueCard({ venue }: { venue: Venue }) {
     <Card className="flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-4">
-          <span style={{ backgroundColor: venue.color }} className="h-4 w-4 rounded-full" />
+          <span style={{ backgroundColor: getVenueColor(venue.color) }} className="h-4 w-4 rounded-full" />
           {venue.name}
         </CardTitle>
       </CardHeader>

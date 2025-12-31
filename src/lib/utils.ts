@@ -19,3 +19,7 @@ export function truncateText(text: string, maxLength: number): string {
   }
   return `${text.substring(0, maxLength)}...`;
 }
+
+export function getVenueColor(color?: string | null): string {
+  return color || '#8D99A6'; // Default slate color
+}

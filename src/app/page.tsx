@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { getFeaturedEventsFirestore, getAllVenues } from '@/lib/data';
+import { getFeaturedEventsFirestore, getAllVenues, enrichEventsWithVenues } from '@/lib/data';
 import type { Event, Venue } from '@/lib/types';
 import { ExpandableEventTile } from '@/components/home/ExpandableEventTile';
 import { CommunitySpotlightSection } from '@/components/home/CommunitySpotlightSection';
@@ -19,12 +19,7 @@ async function getFeaturedEvents(): Promise<EventWithVenue[]> {
     getAllVenues()
   ]);
 
-  const venuesMap = new Map<string, Venue>(allVenues.map(v => [v.id, v]));
-
-  return featured.map(event => ({
-    ...event,
-    venue: venuesMap.get(event.venueId)
-  }));
+  return enrichEventsWithVenues(featured, allVenues);
 }
 
 

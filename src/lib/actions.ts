@@ -17,35 +17,38 @@ import { postSlackMessage } from '@/lib/notifications';
 // --- Test hook for Firestore adminDb (used only in unit tests) ---
 let __testAdminDb: any | null = null;
 export async function __setTestAdminDb(db: any | null) {
-  __testAdminDb = db;
+    __testAdminDb = db;
 }
 function getDb() {
-  return __testAdminDb || adminDb;
+    return __testAdminDb || adminDb;
 }
 
 // Lightweight auth debugging (masked) to help diagnose token issues
 const __debugAuth = (process.env.DEBUG_AUTH === '1') || (process.env.NODE_ENV !== 'production');
 function __authLog(...args: any[]) {
-  if (__debugAuth) {
-    try { console.log('[auth-debug]', ...args); } catch {}
-  }
+    if (__debugAuth) {
+        try { console.log('[auth-debug]', ...args); } catch { }
+    }
 }
 function __maskToken(t?: string | null) {
-  if (!t) return 'none';
-  try {
-    const s = String(t);
-    if (s.length <= 12) return `${s}`;
-    return `${s.slice(0, 6)}...${s.slice(-6)}`;
-  } catch {
-    return 'unavailable';
-  }
+    if (!t) return 'none';
+    try {
+        const s = String(t);
+        if (s.length <= 12) return `${s}`;
+        return `${s.slice(0, 6)}...${s.slice(-6)}`;
+    } catch {
+        return 'unavailable';
+    }
 }
 
 export async function revalidateAdminPaths() {
-  revalidatePath('/admin');
-  revalidatePath('/calendar');
-  revalidatePath('/');
-  revalidatePath('/about-us');
+    revalidatePath('/admin');
+    revalidatePath('/calendar');
+    revalidatePath('/');
+    revalidatePath('/news');
+    revalidatePath('/reviews');
+    revalidatePath('/about-us');
+    revalidatePath('/timeline-demo');
 }
 
 /**
@@ -126,15 +129,15 @@ export async function updateReviewAction(
             (cleanUpdates as any).flaggedBy = admin.firestore.FieldValue.delete();
         }
 
-            await reviewRef.update(cleanUpdates);
+        await reviewRef.update(cleanUpdates);
 
         // Revalidate non-critical; swallow errors (e.g., in tests or offline)
         try {
-          revalidatePath('/reviews');
-          revalidatePath('/calendar');
-          revalidatePath(`/profile/${requesterUid}`);
+            revalidatePath('/reviews');
+            revalidatePath('/calendar');
+            revalidatePath(`/profile/${requesterUid}`);
         } catch (e) {
-          console.warn('[updateReviewAction] revalidate failed (ignored):', e);
+            console.warn('[updateReviewAction] revalidate failed (ignored):', e);
         }
 
         return { success: true, message: 'Review updated successfully.' };
@@ -146,407 +149,407 @@ export async function updateReviewAction(
 }
 
 type ScrapeEventMeta = {
-  processedBy: 'html' | 'ai';
-  model?: string;
-  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
-  costUsd?: number;
+    processedBy: 'html' | 'ai';
+    model?: string;
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+    costUsd?: number;
 };
 
 function computeAiCostUsd(
-  usage?: { inputTokens?: number; outputTokens?: number },
-  model?: string
+    usage?: { inputTokens?: number; outputTokens?: number },
+    model?: string
 ): number | undefined {
-  if (!usage) return undefined;
-  const input = usage.inputTokens ?? 0;
-  const output = usage.outputTokens ?? 0;
-  const perMTokens = (v?: string) => (v ? Number(v) : NaN);
+    if (!usage) return undefined;
+    const input = usage.inputTokens ?? 0;
+    const output = usage.outputTokens ?? 0;
+    const perMTokens = (v?: string) => (v ? Number(v) : NaN);
 
-  const m = (model || '').toLowerCase();
-  const envM = (process.env.AI_MODEL || '').toLowerCase();
-  let inRate = NaN;
-  let outRate = NaN;
+    const m = (model || '').toLowerCase();
+    const envM = (process.env.AI_MODEL || '').toLowerCase();
+    let inRate = NaN;
+    let outRate = NaN;
 
-  // Normalize provider detection in case the returned model lacks a provider prefix
-  const googleLike = m.startsWith('googleai/') || m.includes('gemini') || envM.startsWith('googleai/') || envM.includes('gemini');
-  const openaiLike = m.startsWith('openai/') || m.includes('gpt') || envM.startsWith('openai/') || envM.includes('gpt');
+    // Normalize provider detection in case the returned model lacks a provider prefix
+    const googleLike = m.startsWith('googleai/') || m.includes('gemini') || envM.startsWith('googleai/') || envM.includes('gemini');
+    const openaiLike = m.startsWith('openai/') || m.includes('gpt') || envM.startsWith('openai/') || envM.includes('gpt');
 
-  // Google Gemini pricing (supports tiering by 128k prompt/output threshold when *_LOW_*/*_HIGH_* vars are present)
-  if (googleLike) {
-    const isFlash = m.includes('flash') || envM.includes('flash');
-    const isPro = m.includes('pro') || envM.includes('pro');
-    const inputHighTier = (usage.inputTokens ?? 0) > 128_000; // prompts > 128k tokens
-    const outputHighTier = (usage.outputTokens ?? 0) > 128_000; // generations > 128k tokens
+    // Google Gemini pricing (supports tiering by 128k prompt/output threshold when *_LOW_*/*_HIGH_* vars are present)
+    if (googleLike) {
+        const isFlash = m.includes('flash') || envM.includes('flash');
+        const isPro = m.includes('pro') || envM.includes('pro');
+        const inputHighTier = (usage.inputTokens ?? 0) > 128_000; // prompts > 128k tokens
+        const outputHighTier = (usage.outputTokens ?? 0) > 128_000; // generations > 128k tokens
 
-    const pickTiered = (
-      lowVar?: string,
-      highVar?: string,
-      singleVar?: string,
-      isHigh?: boolean
-    ) => {
-      // Prefer explicit tiered vars, else single rate var
-      const low = perMTokens(lowVar);
-      const high = perMTokens(highVar);
-      const single = perMTokens(singleVar);
-      if (Number.isFinite(low) && Number.isFinite(high)) {
-        return isHigh ? (high as number) : (low as number);
-      }
-      return single;
-    };
+        const pickTiered = (
+            lowVar?: string,
+            highVar?: string,
+            singleVar?: string,
+            isHigh?: boolean
+        ) => {
+            // Prefer explicit tiered vars, else single rate var
+            const low = perMTokens(lowVar);
+            const high = perMTokens(highVar);
+            const single = perMTokens(singleVar);
+            if (Number.isFinite(low) && Number.isFinite(high)) {
+                return isHigh ? (high as number) : (low as number);
+            }
+            return single;
+        };
 
-    if (isFlash) {
-      inRate = pickTiered(
-        process.env.GEMINI_FLASH_INPUT_LOW_USD_PER_MTOKENS,
-        process.env.GEMINI_FLASH_INPUT_HIGH_USD_PER_MTOKENS,
-        process.env.GEMINI_FLASH_INPUT_USD_PER_MTOKENS,
-        inputHighTier
-      );
-      outRate = pickTiered(
-        process.env.GEMINI_FLASH_OUTPUT_LOW_USD_PER_MTOKENS,
-        process.env.GEMINI_FLASH_OUTPUT_HIGH_USD_PER_MTOKENS,
-        process.env.GEMINI_FLASH_OUTPUT_USD_PER_MTOKENS,
-        outputHighTier
-      );
-    } else if (isPro) {
-      inRate = pickTiered(
-        process.env.GEMINI_PRO_INPUT_LOW_USD_PER_MTOKENS,
-        process.env.GEMINI_PRO_INPUT_HIGH_USD_PER_MTOKENS,
-        process.env.GEMINI_PRO_INPUT_USD_PER_MTOKENS,
-        inputHighTier
-      );
-      outRate = pickTiered(
-        process.env.GEMINI_PRO_OUTPUT_LOW_USD_PER_MTOKENS,
-        process.env.GEMINI_PRO_OUTPUT_HIGH_USD_PER_MTOKENS,
-        process.env.GEMINI_PRO_OUTPUT_USD_PER_MTOKENS,
-        outputHighTier
-      );
-    }
-    if (!Number.isFinite(inRate)) inRate = perMTokens(process.env.GENAI_INPUT_USD_PER_MTOKENS);
-    if (!Number.isFinite(outRate)) outRate = perMTokens(process.env.GENAI_OUTPUT_USD_PER_MTOKENS);
-  }
-
-  // OpenAI pricing (GPT-4o family, GPT-5 family)
-  if (openaiLike) {
-    // GPT-4o
-    if (m.includes('gpt-4o-mini')) {
-      inRate = perMTokens(process.env.OPENAI_GPT4O_MINI_INPUT_USD_PER_MTOKENS);
-      outRate = perMTokens(process.env.OPENAI_GPT4O_MINI_OUTPUT_USD_PER_MTOKENS);
-    } else if (m.includes('gpt-4o')) { // plain 4o
-      inRate = perMTokens(process.env.OPENAI_GPT4O_INPUT_USD_PER_MTOKENS);
-      outRate = perMTokens(process.env.OPENAI_GPT4O_OUTPUT_USD_PER_MTOKENS);
+        if (isFlash) {
+            inRate = pickTiered(
+                process.env.GEMINI_FLASH_INPUT_LOW_USD_PER_MTOKENS,
+                process.env.GEMINI_FLASH_INPUT_HIGH_USD_PER_MTOKENS,
+                process.env.GEMINI_FLASH_INPUT_USD_PER_MTOKENS,
+                inputHighTier
+            );
+            outRate = pickTiered(
+                process.env.GEMINI_FLASH_OUTPUT_LOW_USD_PER_MTOKENS,
+                process.env.GEMINI_FLASH_OUTPUT_HIGH_USD_PER_MTOKENS,
+                process.env.GEMINI_FLASH_OUTPUT_USD_PER_MTOKENS,
+                outputHighTier
+            );
+        } else if (isPro) {
+            inRate = pickTiered(
+                process.env.GEMINI_PRO_INPUT_LOW_USD_PER_MTOKENS,
+                process.env.GEMINI_PRO_INPUT_HIGH_USD_PER_MTOKENS,
+                process.env.GEMINI_PRO_INPUT_USD_PER_MTOKENS,
+                inputHighTier
+            );
+            outRate = pickTiered(
+                process.env.GEMINI_PRO_OUTPUT_LOW_USD_PER_MTOKENS,
+                process.env.GEMINI_PRO_OUTPUT_HIGH_USD_PER_MTOKENS,
+                process.env.GEMINI_PRO_OUTPUT_USD_PER_MTOKENS,
+                outputHighTier
+            );
+        }
+        if (!Number.isFinite(inRate)) inRate = perMTokens(process.env.GENAI_INPUT_USD_PER_MTOKENS);
+        if (!Number.isFinite(outRate)) outRate = perMTokens(process.env.GENAI_OUTPUT_USD_PER_MTOKENS);
     }
 
-    // GPT-5 family
-    if (m.includes('gpt-5-mini')) {
-      inRate = perMTokens(process.env.OPENAI_GPT5_MINI_INPUT_USD_PER_MTOKENS);
-      outRate = perMTokens(process.env.OPENAI_GPT5_MINI_OUTPUT_USD_PER_MTOKENS);
-    } else if (m.includes('gpt-5-nano')) {
-      inRate = perMTokens(process.env.OPENAI_GPT5_NANO_INPUT_USD_PER_MTOKENS);
-      outRate = perMTokens(process.env.OPENAI_GPT5_NANO_OUTPUT_USD_PER_MTOKENS);
-    } else if (m.includes('gpt-5')) {
-      inRate = perMTokens(process.env.OPENAI_GPT5_INPUT_USD_PER_MTOKENS);
-      outRate = perMTokens(process.env.OPENAI_GPT5_OUTPUT_USD_PER_MTOKENS);
+    // OpenAI pricing (GPT-4o family, GPT-5 family)
+    if (openaiLike) {
+        // GPT-4o
+        if (m.includes('gpt-4o-mini')) {
+            inRate = perMTokens(process.env.OPENAI_GPT4O_MINI_INPUT_USD_PER_MTOKENS);
+            outRate = perMTokens(process.env.OPENAI_GPT4O_MINI_OUTPUT_USD_PER_MTOKENS);
+        } else if (m.includes('gpt-4o')) { // plain 4o
+            inRate = perMTokens(process.env.OPENAI_GPT4O_INPUT_USD_PER_MTOKENS);
+            outRate = perMTokens(process.env.OPENAI_GPT4O_OUTPUT_USD_PER_MTOKENS);
+        }
+
+        // GPT-5 family
+        if (m.includes('gpt-5-mini')) {
+            inRate = perMTokens(process.env.OPENAI_GPT5_MINI_INPUT_USD_PER_MTOKENS);
+            outRate = perMTokens(process.env.OPENAI_GPT5_MINI_OUTPUT_USD_PER_MTOKENS);
+        } else if (m.includes('gpt-5-nano')) {
+            inRate = perMTokens(process.env.OPENAI_GPT5_NANO_INPUT_USD_PER_MTOKENS);
+            outRate = perMTokens(process.env.OPENAI_GPT5_NANO_OUTPUT_USD_PER_MTOKENS);
+        } else if (m.includes('gpt-5')) {
+            inRate = perMTokens(process.env.OPENAI_GPT5_INPUT_USD_PER_MTOKENS);
+            outRate = perMTokens(process.env.OPENAI_GPT5_OUTPUT_USD_PER_MTOKENS);
+        }
+
+        // Generic OpenAI fallback if provided
+        if (!Number.isFinite(inRate)) inRate = perMTokens(process.env.OPENAI_INPUT_USD_PER_MTOKENS);
+        if (!Number.isFinite(outRate)) outRate = perMTokens(process.env.OPENAI_OUTPUT_USD_PER_MTOKENS);
     }
 
-    // Generic OpenAI fallback if provided
-    if (!Number.isFinite(inRate)) inRate = perMTokens(process.env.OPENAI_INPUT_USD_PER_MTOKENS);
-    if (!Number.isFinite(outRate)) outRate = perMTokens(process.env.OPENAI_OUTPUT_USD_PER_MTOKENS);
-  }
-
-  if (Number.isFinite(inRate) && Number.isFinite(outRate)) {
-    const cost = (input / 1_000_000) * (inRate as number) + (output / 1_000_000) * (outRate as number);
-    return Math.round(cost * 1e6) / 1e6;
-  }
-  return undefined;
+    if (Number.isFinite(inRate) && Number.isFinite(outRate)) {
+        const cost = (input / 1_000_000) * (inRate as number) + (output / 1_000_000) * (outRate as number);
+        return Math.round(cost * 1e6) / 1e6;
+    }
+    return undefined;
 }
 
 // --- Test hook for token decoding (used only in unit tests) ---
 let __testTokenDecoder: null | ((token: string) => Promise<any>) = null;
 export async function __setTestTokenDecoder(decoder: ((token: string) => Promise<any>) | null) {
-  __testTokenDecoder = decoder;
+    __testTokenDecoder = decoder;
 }
 
 // Helper to retrieve and verify the Firebase ID token either from an argument or the Authorization header
 async function getDecodedTokenFromHeadersOrArg(idToken?: string): Promise<import('firebase-admin').auth.DecodedIdToken | null> {
-  let token = idToken;
-  let source: 'arg' | 'header' | 'none' = token ? 'arg' : 'none';
-  try {
-    if (!token) {
-      const hdrs = await headers();
-      const authHeader = hdrs.get('Authorization');
-      const hasBearer = !!authHeader?.startsWith('Bearer ');
-      __authLog('Token lookup: argPresent=%s headerHasBearer=%s', !!idToken, hasBearer);
-      if (hasBearer) {
-        token = authHeader!.split('Bearer ')[1];
-        source = 'header';
-      }
-    } else {
-      __authLog('Token provided via arg: %s', __maskToken(token));
+    let token = idToken;
+    let source: 'arg' | 'header' | 'none' = token ? 'arg' : 'none';
+    try {
+        if (!token) {
+            const hdrs = await headers();
+            const authHeader = hdrs.get('Authorization');
+            const hasBearer = !!authHeader?.startsWith('Bearer ');
+            __authLog('Token lookup: argPresent=%s headerHasBearer=%s', !!idToken, hasBearer);
+            if (hasBearer) {
+                token = authHeader!.split('Bearer ')[1];
+                source = 'header';
+            }
+        } else {
+            __authLog('Token provided via arg: %s', __maskToken(token));
+        }
+        if (token) {
+            if (__testTokenDecoder) {
+                const decoded = await __testTokenDecoder(token);
+                __authLog('Decoded via test decoder from %s: uid=%s email=%s', source, decoded?.uid, decoded?.email);
+                return decoded as any;
+            }
+            const decoded = await admin.auth().verifyIdToken(token);
+            __authLog('verifyIdToken ok from %s: uid=%s email=%s', source, decoded?.uid, decoded?.email);
+            return decoded;
+        }
+        __authLog('No token found from arg or headers');
+    } catch (err: any) {
+        __authLog('verifyIdToken failed. source=%s token=%s error=%s', source, __maskToken(token), err?.message || String(err));
     }
-    if (token) {
-      if (__testTokenDecoder) {
-        const decoded = await __testTokenDecoder(token);
-        __authLog('Decoded via test decoder from %s: uid=%s email=%s', source, decoded?.uid, decoded?.email);
-        return decoded as any;
-      }
-      const decoded = await admin.auth().verifyIdToken(token);
-      __authLog('verifyIdToken ok from %s: uid=%s email=%s', source, decoded?.uid, decoded?.email);
-      return decoded;
-    }
-    __authLog('No token found from arg or headers');
-  } catch (err: any) {
-    __authLog('verifyIdToken failed. source=%s token=%s error=%s', source, __maskToken(token), err?.message || String(err));
-  }
-  return null;
+    return null;
 }
 
 export async function scrapeEventAction(url: string | undefined, screenshotDataUri: string, model?: string) {
-  try {
-    // Try HTML-first scraping when a URL is provided
-    if (url) {
-      try {
-        const htmlData = await extractEventFromUrl(url);
-        if (htmlData) {
-          const meta: ScrapeEventMeta = { processedBy: 'html' };
-          return { success: true, data: { ...htmlData, sourceUrl: url }, meta };
+    try {
+        // Try HTML-first scraping when a URL is provided
+        if (url) {
+            try {
+                const htmlData = await extractEventFromUrl(url);
+                if (htmlData) {
+                    const meta: ScrapeEventMeta = { processedBy: 'html' };
+                    return { success: true, data: { ...htmlData, sourceUrl: url }, meta };
+                }
+            } catch (htmlErr) {
+                console.warn('HTML extraction failed, falling back to AI:', htmlErr);
+            }
         }
-      } catch (htmlErr) {
-        console.warn('HTML extraction failed, falling back to AI:', htmlErr);
-      }
-    }
 
-    // Fallback to AI-based extraction (uses screenshot and optional URL)
-    const { output, meta } = await scrapeEventDetails({ url, screenshotDataUri }, model);
-    const costUsd = computeAiCostUsd(meta?.usage, meta?.model);
-    const combinedMeta: ScrapeEventMeta = {
-      processedBy: 'ai',
-      model: meta?.model,
-      usage: meta?.usage,
-      costUsd,
-    };
-    return { success: true, data: { ...output, sourceUrl: url }, meta: combinedMeta };
-  } catch (error) {
-    console.error('Scraping failed:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `An unexpected error occurred while scraping the event details. Error: ${errorMessage}` };
-  }
+        // Fallback to AI-based extraction (uses screenshot and optional URL)
+        const { output, meta } = await scrapeEventDetails({ url, screenshotDataUri }, model);
+        const costUsd = computeAiCostUsd(meta?.usage, meta?.model);
+        const combinedMeta: ScrapeEventMeta = {
+            processedBy: 'ai',
+            model: meta?.model,
+            usage: meta?.usage,
+            costUsd,
+        };
+        return { success: true, data: { ...output, sourceUrl: url }, meta: combinedMeta };
+    } catch (error) {
+        console.error('Scraping failed:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `An unexpected error occurred while scraping the event details. Error: ${errorMessage}` };
+    }
 }
 
 interface EventFormData {
-  title: string;
-  description?: string;
-  url?: string;
-  posterUrl?: string;
-  venueId: string;
-  type: string;
-  tags?: string[];
-  occurrences: EventOccurrence[];
+    title: string;
+    description?: string;
+    url?: string;
+    posterUrl?: string;
+    venueId: string;
+    type: string;
+    tags?: string[];
+    occurrences: EventOccurrence[];
 }
 
 export async function addEventFromFormAction(data: EventFormData, idToken?: string) {
-  try {
-    // AuthN/AuthZ: allow admin or venue reps assigned to the target venue
-    const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
-    if (!decodedToken?.uid) {
-      return { success: false, message: 'Not authenticated.' };
-    }
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-    const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
-    let canManageVenue = isAdmin;
-    if (!isAdmin) {
-      const profile = await getOrCreateUserProfile(decodedToken.uid);
-      const isRep = !!profile?.isVenueRep;
-      const assigned = profile?.assignedVenueIds || [];
-      canManageVenue = isRep && assigned.includes(data.venueId);
-    }
-    if (!canManageVenue) {
-      return { success: false, message: 'Not authorized to add events for this venue.' };
-    }
+    try {
+        // AuthN/AuthZ: allow admin or venue reps assigned to the target venue
+        const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
+        if (!decodedToken?.uid) {
+            return { success: false, message: 'Not authenticated.' };
+        }
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
+        let canManageVenue = isAdmin;
+        if (!isAdmin) {
+            const profile = await getOrCreateUserProfile(decodedToken.uid);
+            const isRep = !!profile?.isVenueRep;
+            const assigned = profile?.assignedVenueIds || [];
+            canManageVenue = isRep && assigned.includes(data.venueId);
+        }
+        if (!canManageVenue) {
+            return { success: false, message: 'Not authorized to add events for this venue.' };
+        }
 
-    const { title, venueId } = data;
+        const { title, venueId } = data;
 
-    // Validate venue existence to prevent creating events for non-existent venues
-    const venueIsReal = await venueExists(venueId);
-    if (!venueIsReal) {
-      return { success: false, message: 'Venue not found. Please select a valid venue.' };
+        // Validate venue existence to prevent creating events for non-existent venues
+        const venueIsReal = await venueExists(venueId);
+        if (!venueIsReal) {
+            return { success: false, message: 'Venue not found. Please select a valid venue.' };
+        }
+        const alreadyExists = await eventExists(title, venueId);
+        if (alreadyExists) {
+            return { success: false, message: `This event ("${title}") already exists in the system for this venue.` };
+        }
+
+        const newEvent: Omit<Event, 'id'> = {
+            ...data,
+            description: data.description || '',
+            tags: data.tags || [],
+            status: isAdmin ? 'approved' : 'pending',
+            createdBy: decodedToken.uid,
+        };
+
+        await addEvent(newEvent);
+        await revalidateAdminPaths();
+        return {
+            success: true,
+            message: isAdmin
+                ? 'Event added and approved successfully.'
+                : 'Event submitted for approval. You will be notified once an admin approves it.'
+        };
+
+    } catch (error) {
+        console.error('Failed to add event:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
     }
-    const alreadyExists = await eventExists(title, venueId);
-    if (alreadyExists) {
-        return { success: false, message: `This event ("${title}") already exists in the system for this venue.` };
-    }
-
-    const newEvent: Omit<Event, 'id'> = {
-      ...data,
-      description: data.description || '',
-      tags: data.tags || [],
-      status: isAdmin ? 'approved' : 'pending',
-      createdBy: decodedToken.uid,
-    };
-
-    await addEvent(newEvent);
-    await revalidateAdminPaths();
-    return {
-      success: true,
-      message: isAdmin
-        ? 'Event added and approved successfully.'
-        : 'Event submitted for approval. You will be notified once an admin approves it.'
-    };
-
-  } catch (error) {
-    console.error('Failed to add event:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
-  }
 }
 
 
 export async function updateEventAction(eventId: string, data: EventFormData, idToken?: string) {
-  try {
-    // AuthN/AuthZ: allow admin or venue reps assigned to the event's venue
-    const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
-    if (!decodedToken?.uid) {
-      return { success: false, message: 'Not authenticated.' };
-    }
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-    const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
-
-    const eventRef = adminDb.collection('events').doc(eventId);
-    const existingSnap = await eventRef.get();
-    if (!existingSnap.exists) {
-      return { success: false, message: 'Event not found.' };
-    }
-    const current = existingSnap.data() as Event;
-
-    // Authorization: Only admin or creator may edit.
-    if (!isAdmin) {
-      const requesterUid = decodedToken.uid;
-      const isCreator = !!(current as any).createdBy && (current as any).createdBy === requesterUid;
-      if (!isCreator) {
-        // Legacy fallback: allow assigned venue reps to edit events that predate `createdBy`
-        const profile = await getOrCreateUserProfile(requesterUid);
-        const isRep = !!profile?.isVenueRep;
-        const assigned = profile?.assignedVenueIds || [];
-        const legacyAllowed = (!(current as any).createdBy || (current as any).createdBy === '') && isRep && assigned.includes(current.venueId);
-        if (!legacyAllowed) {
-          return { success: false, message: 'Only the event creator or an admin can edit this event.' };
+    try {
+        // AuthN/AuthZ: allow admin or venue reps assigned to the event's venue
+        const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
+        if (!decodedToken?.uid) {
+            return { success: false, message: 'Not authenticated.' };
         }
-      }
-      // Venue reps cannot change the venue of an event
-      if (data.venueId && data.venueId !== current.venueId) {
-        return { success: false, message: 'Venue representatives cannot change the venue of an event.' };
-      }
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
+
+        const eventRef = adminDb.collection('events').doc(eventId);
+        const existingSnap = await eventRef.get();
+        if (!existingSnap.exists) {
+            return { success: false, message: 'Event not found.' };
+        }
+        const current = existingSnap.data() as Event;
+
+        // Authorization: Only admin or creator may edit.
+        if (!isAdmin) {
+            const requesterUid = decodedToken.uid;
+            const isCreator = !!(current as any).createdBy && (current as any).createdBy === requesterUid;
+            if (!isCreator) {
+                // Legacy fallback: allow assigned venue reps to edit events that predate `createdBy`
+                const profile = await getOrCreateUserProfile(requesterUid);
+                const isRep = !!profile?.isVenueRep;
+                const assigned = profile?.assignedVenueIds || [];
+                const legacyAllowed = (!(current as any).createdBy || (current as any).createdBy === '') && isRep && assigned.includes(current.venueId);
+                if (!legacyAllowed) {
+                    return { success: false, message: 'Only the event creator or an admin can edit this event.' };
+                }
+            }
+            // Venue reps cannot change the venue of an event
+            if (data.venueId && data.venueId !== current.venueId) {
+                return { success: false, message: 'Venue representatives cannot change the venue of an event.' };
+            }
+        }
+
+        // Sanitize data: Firestore throws an error if any field value is `undefined`.
+        // We create a new object and only add fields that have a defined value.
+        const cleanData: { [key: string]: any } = {};
+        for (const key in data) {
+            if (data[key as keyof EventFormData] !== undefined) {
+                cleanData[key] = data[key as keyof EventFormData];
+            }
+        }
+        // Ensure description and URL are at least an empty string if they're not provided
+        cleanData.description = cleanData.description || '';
+        cleanData.url = cleanData.url || '';
+        cleanData.tags = cleanData.tags || [];
+
+
+        await eventRef.update(cleanData);
+
+        await revalidateAdminPaths();
+        return { success: true, message: 'Event updated successfully.' };
+    } catch (error) {
+        console.error('Failed to update event:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
     }
-
-    // Sanitize data: Firestore throws an error if any field value is `undefined`.
-    // We create a new object and only add fields that have a defined value.
-    const cleanData: { [key: string]: any } = {};
-    for (const key in data) {
-      if (data[key as keyof EventFormData] !== undefined) {
-        cleanData[key] = data[key as keyof EventFormData];
-      }
-    }
-    // Ensure description and URL are at least an empty string if they're not provided
-    cleanData.description = cleanData.description || '';
-    cleanData.url = cleanData.url || '';
-    cleanData.tags = cleanData.tags || [];
-
-
-    await eventRef.update(cleanData);
-
-    await revalidateAdminPaths();
-    return { success: true, message: 'Event updated successfully.' };
-  } catch (error) {
-    console.error('Failed to update event:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
-  }
 }
 
 // Upload an event poster image and return a public URL
 export async function uploadEventPosterAction(formData: FormData, idToken?: string) {
-  try {
-    const file = formData.get('poster') as File | null;
-    const venueId = (formData.get('venueId') as string | null) || '';
-
-    if (!file || !venueId) {
-      return { success: false, message: 'Missing file or venueId.' };
-    }
-
-    // AuthN/AuthZ: allow admin or venue reps assigned to the target venue
-    const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
-    if (!decodedToken?.uid) {
-      return { success: false, message: 'Not authenticated.' };
-    }
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
-    const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
-    let canManageVenue = isAdmin;
-    if (!isAdmin) {
-      const profile = await getOrCreateUserProfile(decodedToken.uid);
-      const isRep = !!profile?.isVenueRep;
-      const assigned = profile?.assignedVenueIds || [];
-      canManageVenue = isRep && assigned.includes(venueId);
-    }
-    if (!canManageVenue) {
-      return { success: false, message: 'Not authorized to upload posters for this venue.' };
-    }
-
-    // Basic validation
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const maxBytes = 10 * 1024 * 1024; // 10MB
-    if (!allowedTypes.includes(file.type)) {
-      return { success: false, message: 'Unsupported file type. Please upload a JPG, PNG, GIF, or WEBP image.' };
-    }
-    if (typeof file.size === 'number' && file.size > maxBytes) {
-      return { success: false, message: 'File too large. Maximum size is 10 MB.' };
-    }
-
-    // Cloudinary removed; using Firebase Storage only
-
-    // Firebase Storage fallback (robust bucket resolution with production fallback)
-    let bucket;
     try {
-      bucket = getStorageBucket();
+        const file = formData.get('poster') as File | null;
+        const venueId = (formData.get('venueId') as string | null) || '';
+
+        if (!file || !venueId) {
+            return { success: false, message: 'Missing file or venueId.' };
+        }
+
+        // AuthN/AuthZ: allow admin or venue reps assigned to the target venue
+        const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
+        if (!decodedToken?.uid) {
+            return { success: false, message: 'Not authenticated.' };
+        }
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        const isAdmin = adminEmail ? decodedToken.email === adminEmail : true; // testing fallback like AuthProvider
+        let canManageVenue = isAdmin;
+        if (!isAdmin) {
+            const profile = await getOrCreateUserProfile(decodedToken.uid);
+            const isRep = !!profile?.isVenueRep;
+            const assigned = profile?.assignedVenueIds || [];
+            canManageVenue = isRep && assigned.includes(venueId);
+        }
+        if (!canManageVenue) {
+            return { success: false, message: 'Not authorized to upload posters for this venue.' };
+        }
+
+        // Basic validation
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        const maxBytes = 10 * 1024 * 1024; // 10MB
+        if (!allowedTypes.includes(file.type)) {
+            return { success: false, message: 'Unsupported file type. Please upload a JPG, PNG, GIF, or WEBP image.' };
+        }
+        if (typeof file.size === 'number' && file.size > maxBytes) {
+            return { success: false, message: 'File too large. Maximum size is 10 MB.' };
+        }
+
+        // Cloudinary removed; using Firebase Storage only
+
+        // Firebase Storage fallback (robust bucket resolution with production fallback)
+        let bucket;
+        try {
+            bucket = getStorageBucket();
+        } catch (error) {
+            console.warn('getStorageBucket failed, using fallback bucket resolution:', error);
+            // Fallback: try to get bucket directly from environment or use default
+            const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '';
+            const admin = await import('firebase-admin');
+            bucket = fallbackBucket ? admin.default.storage().bucket(fallbackBucket) : admin.default.storage().bucket();
+        }
+        const buffer = Buffer.from(await file.arrayBuffer());
+
+        // Light integrity check
+        const isJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+        const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(pngSig);
+        const isGif = buffer.length > 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+        const isRiff = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF';
+        const isWebp = isRiff && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+        const looksLikeImage = isJpeg || isPng || isGif || isWebp;
+        if (!looksLikeImage) {
+            return { success: false, message: 'File content does not look like a valid image.' };
+        }
+
+        const fileName = `events/${venueId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${file.name}`;
+        const fileUpload = bucket.file(fileName);
+        const token = randomUUID();
+        await fileUpload.save(buffer, {
+            resumable: false,
+            validation: 'crc32c',
+            metadata: {
+                contentType: file.type,
+                cacheControl: 'public, max-age=31536000, immutable',
+                metadata: { firebaseStorageDownloadTokens: token },
+            },
+        });
+        const bucketName = fileUpload.bucket.name;
+        const encodedPath = encodeURIComponent(fileUpload.name);
+        const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
+        return { success: true, url: publicUrl };
     } catch (error) {
-      console.warn('getStorageBucket failed, using fallback bucket resolution:', error);
-      // Fallback: try to get bucket directly from environment or use default
-      const fallbackBucket = process.env.FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '';
-      const admin = await import('firebase-admin');
-      bucket = fallbackBucket ? admin.default.storage().bucket(fallbackBucket) : admin.default.storage().bucket();
+        console.error('Failed to upload event poster:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `Upload failed: ${errorMessage}` };
     }
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Light integrity check
-    const isJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-    const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const isPng = buffer.length >= 8 && buffer.subarray(0, 8).equals(pngSig);
-    const isGif = buffer.length > 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
-    const isRiff = buffer.length > 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF';
-    const isWebp = isRiff && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
-    const looksLikeImage = isJpeg || isPng || isGif || isWebp;
-    if (!looksLikeImage) {
-      return { success: false, message: 'File content does not look like a valid image.' };
-    }
-
-    const fileName = `events/${venueId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${file.name}`;
-    const fileUpload = bucket.file(fileName);
-    const token = randomUUID();
-    await fileUpload.save(buffer, {
-      resumable: false,
-      validation: 'crc32c',
-      metadata: {
-        contentType: file.type,
-        cacheControl: 'public, max-age=31536000, immutable',
-        metadata: { firebaseStorageDownloadTokens: token },
-      },
-    });
-    const bucketName = fileUpload.bucket.name;
-    const encodedPath = encodeURIComponent(fileUpload.name);
-    const publicUrl = `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodedPath}?alt=media&token=${token}`;
-    return { success: true, url: publicUrl };
-  } catch (error) {
-    console.error('Failed to upload event poster:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `Upload failed: ${errorMessage}` };
-  }
 }
 
 export async function updateEventStatusAction(eventId: string, status: 'approved' | 'denied', idToken?: string) {
@@ -674,7 +677,7 @@ export async function scrapeArticleAction(url: string) {
         if (!articleData.title || !articleData.summary) {
             return { success: false, message: 'The AI could not extract a title and summary from the article.' };
         }
-        
+
         return { success: true, data: { ...articleData, url } };
 
     } catch (error) {
@@ -685,10 +688,10 @@ export async function scrapeArticleAction(url: string) {
 }
 
 interface ArticleFormData {
-  url: string;
-  title: string;
-  summary: string;
-  imageUrl?: string;
+    url: string;
+    title: string;
+    summary: string;
+    imageUrl?: string;
 }
 
 export async function saveNewsArticleAction(data: ArticleFormData, idToken?: string) {
@@ -773,7 +776,7 @@ export async function addListingRequestAction(data: {
         };
 
         await adminDb.collection('listingRequests').add(requestData);
-        
+
         return { success: true, message: 'Request submitted successfully.' };
 
     } catch (error) {
@@ -784,90 +787,90 @@ export async function addListingRequestAction(data: {
 }
 
 export async function addSpotlightNominationAction(data: {
-  nomineeName: string;
-  nomineeProfileId?: string;
-  nomineeEmail?: string;
-  reason?: string;
-  submittedByUid?: string;
-  submittedByName?: string;
-  submittedByEmail?: string;
+    nomineeName: string;
+    nomineeProfileId?: string;
+    nomineeEmail?: string;
+    reason?: string;
+    submittedByUid?: string;
+    submittedByName?: string;
+    submittedByEmail?: string;
 }) {
-  try {
-    const nomination = {
-      ...data,
-      status: 'new',
-      createdAt: new Date().toISOString(),
-    };
+    try {
+        const nomination = {
+            ...data,
+            status: 'new',
+            createdAt: new Date().toISOString(),
+        };
 
-    await adminDb.collection('spotlightNominations').add(nomination);
+        await adminDb.collection('spotlightNominations').add(nomination);
 
-    // Best-effort Slack notification (non-blocking)
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'our-stage-eugene-w930o';
-    const consoleUrl = `https://console.firebase.google.com/project/${projectId}/firestore/data/~2FspotlightNominations`;
-    await postSlackMessage(
-      [
-        ':star2: New Spotlight Nomination',
-        `Nominee: ${data.nomineeName}`,
-        data.nomineeEmail ? `Nominee Email: ${data.nomineeEmail}` : undefined,
-        data.submittedByName || data.submittedByEmail
-          ? `Submitted by: ${data.submittedByName || 'Unknown'}${data.submittedByEmail ? ` <${data.submittedByEmail}>` : ''}`
-          : undefined,
-        data.reason ? `Reason: ${data.reason}` : undefined,
-        `Open in Console: ${consoleUrl}`,
-      ].filter(Boolean).join('\n')
-    );
+        // Best-effort Slack notification (non-blocking)
+        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'our-stage-eugene-w930o';
+        const consoleUrl = `https://console.firebase.google.com/project/${projectId}/firestore/data/~2FspotlightNominations`;
+        await postSlackMessage(
+            [
+                ':star2: New Spotlight Nomination',
+                `Nominee: ${data.nomineeName}`,
+                data.nomineeEmail ? `Nominee Email: ${data.nomineeEmail}` : undefined,
+                data.submittedByName || data.submittedByEmail
+                    ? `Submitted by: ${data.submittedByName || 'Unknown'}${data.submittedByEmail ? ` <${data.submittedByEmail}>` : ''}`
+                    : undefined,
+                data.reason ? `Reason: ${data.reason}` : undefined,
+                `Open in Console: ${consoleUrl}`,
+            ].filter(Boolean).join('\n')
+        );
 
-    return { success: true, message: 'Nomination submitted successfully.' };
-  } catch (error) {
-    console.error('Failed to submit spotlight nomination:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
-  }
+        return { success: true, message: 'Nomination submitted successfully.' };
+    } catch (error) {
+        console.error('Failed to submit spotlight nomination:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
+    }
 }
 
 export async function submitReviewAction(
-  data: Omit<Review, 'id' | 'createdAt' | 'likes' | 'dislikes' | 'votedBy'>,
-  idToken?: string
+    data: Omit<Review, 'id' | 'createdAt' | 'likes' | 'dislikes' | 'votedBy'>,
+    idToken?: string
 ) {
-  try {
-    // Authenticate via token arg or Authorization header
-    const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
-    if (!decodedToken?.uid) {
-      return { success: false, message: 'Not authenticated.' };
-    }
-    if (decodedToken.email_verified !== true) {
-      return { success: false, message: 'Please verify your email before submitting a review.' };
-    }
-
-    const requesterUid = decodedToken.uid;
-    const reviewerNameFromToken = (decodedToken as any).name as string | undefined;
-
-    const reviewData = {
-      ...data,
-      reviewerId: requesterUid, // derive from verified token
-      reviewerName: reviewerNameFromToken || data.reviewerName || 'Anonymous Reviewer',
-      likes: 0,
-      dislikes: 0,
-      votedBy: [],
-      createdAt: new Date().toISOString(),
-    } as Omit<Review, 'id'>;
-
-    await getDb().collection('reviews').add(reviewData);
-
-    // Revalidate non-critical; swallow errors (e.g., in tests or offline)
     try {
-      revalidatePath('/calendar');
-      revalidatePath('/reviews');
-      revalidatePath(`/profile/${requesterUid}`);
-    } catch (e) {
-      console.warn('[submitReviewAction] revalidate failed (ignored):', e);
+        // Authenticate via token arg or Authorization header
+        const decodedToken = await getDecodedTokenFromHeadersOrArg(idToken);
+        if (!decodedToken?.uid) {
+            return { success: false, message: 'Not authenticated.' };
+        }
+        if (decodedToken.email_verified !== true) {
+            return { success: false, message: 'Please verify your email before submitting a review.' };
+        }
+
+        const requesterUid = decodedToken.uid;
+        const reviewerNameFromToken = (decodedToken as any).name as string | undefined;
+
+        const reviewData = {
+            ...data,
+            reviewerId: requesterUid, // derive from verified token
+            reviewerName: reviewerNameFromToken || data.reviewerName || 'Anonymous Reviewer',
+            likes: 0,
+            dislikes: 0,
+            votedBy: [],
+            createdAt: new Date().toISOString(),
+        } as Omit<Review, 'id'>;
+
+        await getDb().collection('reviews').add(reviewData);
+
+        // Revalidate non-critical; swallow errors (e.g., in tests or offline)
+        try {
+            revalidatePath('/calendar');
+            revalidatePath('/reviews');
+            revalidatePath(`/profile/${requesterUid}`);
+        } catch (e) {
+            console.warn('[submitReviewAction] revalidate failed (ignored):', e);
+        }
+        return { success: true, message: 'Your review has been submitted. Thank you!' };
+    } catch (error) {
+        console.error('Failed to submit review:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
     }
-    return { success: true, message: 'Your review has been submitted. Thank you!' };
-  } catch (error) {
-    console.error('Failed to submit review:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, message: `An unexpected error occurred. Error: ${errorMessage}` };
-  }
 }
 
 export async function voteOnReviewAction(reviewId: string, voteType: 'like' | 'dislike', userId: string) {
@@ -885,7 +888,7 @@ export async function voteOnReviewAction(reviewId: string, voteType: 'like' | 'd
             }
 
             const reviewData = reviewDoc.data() as Review;
-            
+
             if (reviewData.votedBy?.includes(userId)) {
                 // User has already voted, we don't return an error message to the UI
                 // to avoid letting them know they can't vote again. Just do nothing.
@@ -902,7 +905,7 @@ export async function voteOnReviewAction(reviewId: string, voteType: 'like' | 'd
                 votedBy: newVotedBy,
             });
         });
-        
+
         revalidatePath('/calendar');
         revalidatePath('/reviews');
         return { success: true };
@@ -927,7 +930,7 @@ export async function requestToBeReviewerAction(data: {
         };
 
         await adminDb.collection('reviewerRequests').add(requestData);
-        
+
         return { success: true, message: 'Request submitted successfully.' };
 
     } catch (error) {
@@ -957,14 +960,14 @@ export async function updateUserProfileAction(userId: string, data: Partial<User
         const cleanData = Object.fromEntries(
             Object.entries(data).filter(([, v]) => v !== undefined)
         );
-        
+
         await adminDb.collection('userProfiles').doc(userId).update(cleanData);
 
         // Revalidate paths where this profile might be displayed
         revalidatePath(`/profile/${userId}`);
         revalidatePath('/reviews');
         revalidatePath('/calendar');
-        
+
         return { success: true, message: 'Profile updated successfully.' };
     } catch (error) {
         console.error('Failed to update user profile:', error);
@@ -981,7 +984,7 @@ export async function uploadProfilePhotoAction(formData: FormData) {
     if (!file || !userId) {
         return { success: false, message: 'Missing file or user ID.' };
     }
-    
+
     const profileRef = adminDb.collection('userProfiles').doc(userId);
 
     try {
@@ -1157,7 +1160,7 @@ export async function uploadMultiplePhotosAction(
                     const isWebp = isRiff && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
                     const isBmp = buffer.length > 1 && buffer[0] === 0x42 && buffer[1] === 0x4d;
                     const isTiff = (buffer.length > 3 && buffer[0] === 0x49 && buffer[1] === 0x49 && buffer[2] === 0x2a && buffer[3] === 0x00)
-                      || (buffer.length > 3 && buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a);
+                        || (buffer.length > 3 && buffer[0] === 0x4d && buffer[1] === 0x4d && buffer[2] === 0x00 && buffer[3] === 0x2a);
                     const isIsoBaseFtyp = buffer.length > 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp';
                     const brand = isIsoBaseFtyp ? buffer.subarray(8, 12).toString('ascii') : '';
                     const isHeicFamily = isIsoBaseFtyp && ['heic', 'heif', 'hevc', 'mif1', 'msf1'].includes(brand);
@@ -1355,15 +1358,15 @@ export async function deleteProfilePhotoAction(userId: string, photoUrl: string,
             const adminSdk = await import('firebase-admin');
             bucket = fallbackBucket ? adminSdk.default.storage().bucket(fallbackBucket) : adminSdk.default.storage().bucket();
         }
-        
+
         // Extract the file path from the Google Cloud Storage public URL
         let filePath: string | null = null;
         let parseWarning: string | null = null;
-        
+
         console.log('=== IMAGE DELETION DEBUG ===');
         console.log('User ID:', userId);
         console.log('Photo URL:', photoUrl);
-        
+
         try {
             const url = new URL(photoUrl);
             console.log('Parsed URL:', {
@@ -1372,14 +1375,14 @@ export async function deleteProfilePhotoAction(userId: string, photoUrl: string,
                 search: url.search,
                 full: url.toString()
             });
-            
+
             // Handle different Firebase Storage URL formats
             if (url.hostname === 'storage.googleapis.com') {
                 // Format: https://storage.googleapis.com/bucket-name/path/to/file
                 const pathParts = url.pathname.split('/').filter(part => part.length > 0);
                 console.log('storage.googleapis.com format detected');
                 console.log('Path parts:', pathParts);
-                
+
                 if (pathParts.length >= 2) {
                     filePath = decodeURIComponent(pathParts.slice(1).join('/'));
                     console.log('Extracted file path:', filePath);
@@ -1409,11 +1412,11 @@ export async function deleteProfilePhotoAction(userId: string, photoUrl: string,
             } else {
                 parseWarning = `Unsupported storage hostname: ${url.hostname}`;
             }
-            
+
             console.log('Security check - filePath:', filePath);
             console.log('Security check - expected prefix:', `${userId}/`);
             console.log('Security check - starts with user ID:', filePath ? filePath.startsWith(`${userId}/`) : false);
-            
+
             // Security check to ensure we are only deleting from the target user's folder
             if (filePath && !filePath.startsWith(`${userId}/`)) {
                 if (isAdmin) {
@@ -1424,11 +1427,11 @@ export async function deleteProfilePhotoAction(userId: string, photoUrl: string,
                     filePath = null;
                 }
             }
-            
+
             if (filePath) {
                 console.log('Security check passed, file path:', filePath);
             }
-            
+
         } catch (error) {
             const msg = error instanceof Error ? error.message : String(error);
             parseWarning = `Failed to parse photo URL: ${msg}`;
@@ -1565,7 +1568,7 @@ export async function uploadSpotlightPhotoAction(formData: FormData, idToken?: s
             return { success: false, message: 'Not authorized.' };
         }
     }
-    
+
     try {
         let bucket;
         try {
@@ -1627,7 +1630,7 @@ export async function createSpotlightAction(spotlightData: {
         }
 
         const { createSpotlight } = await import('@/lib/data');
-        
+
         const newSpotlight = await createSpotlight({
             ...spotlightData,
             createdAt: new Date().toISOString(),
@@ -1640,7 +1643,7 @@ export async function createSpotlightAction(spotlightData: {
 
         revalidatePath('/');
         revalidatePath('/admin/spotlights');
-        
+
         return { success: true, spotlight: newSpotlight };
     } catch (error) {
         console.error('Failed to create spotlight:', error);
@@ -1674,9 +1677,9 @@ export async function updateSpotlightAction(id: string, updates: {
         }
 
         const { updateSpotlight, getAllSpotlights } = await import('@/lib/data');
-        
+
         const success = await updateSpotlight(id, updates);
-        
+
         if (!success) {
             return { success: false, message: 'Failed to update spotlight.' };
         }
@@ -1684,14 +1687,14 @@ export async function updateSpotlightAction(id: string, updates: {
         // Get the updated spotlight to return
         const allSpotlights = await getAllSpotlights();
         const updatedSpotlight = allSpotlights.find(s => s.id === id);
-        
+
         if (!updatedSpotlight) {
             return { success: false, message: 'Spotlight updated but could not retrieve updated data.' };
         }
 
         revalidatePath('/');
         revalidatePath('/admin/spotlights');
-        
+
         return { success: true, spotlight: updatedSpotlight };
     } catch (error) {
         console.error('Failed to update spotlight:', error);
@@ -1714,16 +1717,16 @@ export async function deleteSpotlightAction(id: string, idToken?: string) {
         }
 
         const { deleteSpotlight } = await import('@/lib/data');
-        
+
         const success = await deleteSpotlight(id);
-        
+
         if (!success) {
             return { success: false, message: 'Failed to delete spotlight.' };
         }
 
         revalidatePath('/');
         revalidatePath('/admin/spotlights');
-        
+
         return { success: true };
     } catch (error) {
         console.error('Failed to delete spotlight:', error);
@@ -1754,7 +1757,7 @@ export async function toggleReviewerStatusAction(userId: string, isReviewer: boo
 
         revalidatePath('/admin');
         revalidatePath(`/profile/${userId}`);
-        
+
         const action = isReviewer ? 'granted' : 'revoked';
         return { success: true, message: `Reviewer status ${action} successfully.` };
     } catch (error) {
@@ -1785,7 +1788,7 @@ export async function deleteReviewAction(reviewId: string, idToken?: string) {
         revalidatePath('/reviews');
         revalidatePath('/calendar');
         revalidatePath('/admin');
-        
+
         return { success: true, message: 'Review deleted successfully.' };
     } catch (error) {
         console.error('Failed to delete review:', error);
@@ -1820,7 +1823,7 @@ export async function flagReviewForRevisionAction(reviewId: string, reason: stri
         revalidatePath('/reviews');
         revalidatePath('/calendar');
         revalidatePath('/admin');
-        
+
         return { success: true, message: 'Review flagged for revision successfully.' };
     } catch (error) {
         console.error('Failed to flag review for revision:', error);
@@ -1855,7 +1858,7 @@ export async function clearReviewRevisionFlagAction(reviewId: string, idToken?: 
         revalidatePath('/reviews');
         revalidatePath('/calendar');
         revalidatePath('/admin');
-        
+
         return { success: true, message: 'Review revision flag cleared successfully.' };
     } catch (error) {
         console.error('Failed to clear review revision flag:', error);

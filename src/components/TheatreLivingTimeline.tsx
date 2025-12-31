@@ -4,7 +4,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import * as d3 from 'd3';
 import moment from 'moment';
-import { cn } from '@/lib/utils';
+import { cn, getVenueColor } from '@/lib/utils';
 import { Event, Venue } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 
@@ -229,8 +229,8 @@ export function TheatreLivingTimeline({ className, events, venues }: TheatreLivi
                                     isExpanded ? "text-lg text-slate-900" : "text-sm text-slate-900"
                                 )}
                                 style={{
-                                    textShadow: isExpanded ? `0 2px 8px ${venue.color}` : '0 1px 2px rgba(255,255,255,0.8)',
-                                    color: isExpanded ? venue.color : undefined
+                                    textShadow: isExpanded ? `0 2px 8px ${getVenueColor(venue.color)}` : '0 1px 2px rgba(255,255,255,0.8)',
+                                    color: isExpanded ? getVenueColor(venue.color) : undefined
                                 }}
                             >
                                 {venue.name}
@@ -320,7 +320,7 @@ function VenueThread({ venue, events, yBase, xScale, width, transform, router, i
             {/* Base Thread - Undulating */}
             <motion.path
                 d={pathD}
-                stroke={venue.color}
+                stroke={getVenueColor(venue.color)}
                 strokeWidth={isExpanded ? 3 : 2}
                 strokeOpacity={isExpanded ? 0.5 : 0.3}
                 fill="none"
@@ -376,8 +376,8 @@ function EventBubble({ event, venue, x, y, onClick }: { event: Event, venue: Ven
 
             <motion.circle
                 r={radius}
-                fill={event.posterUrl ? `url(#poster-${event.id})` : venue.color}
-                stroke={venue.color}
+                fill={event.posterUrl ? `url(#poster-${event.id})` : getVenueColor(venue.color)}
+                stroke={getVenueColor(venue.color)}
                 strokeWidth={2}
                 filter="url(#strong-glow)"
                 whileHover={{ scale: 1.2 }}
