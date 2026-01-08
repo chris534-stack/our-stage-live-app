@@ -40,8 +40,8 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
     const [readerFontSize, setReaderFontSize] = useState<ReviewFontSize>('medium');
     const router = useRouter();
     const isAuthor = user?.uid === review.reviewerId;
-    
-    const snippet = review.specialMomentsText.length > 150 
+
+    const snippet = review.specialMomentsText.length > 150
         ? review.specialMomentsText.substring(0, 150) + '...'
         : review.specialMomentsText;
 
@@ -51,7 +51,7 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
         year: 'numeric',
         timeZone: 'UTC'
     });
-    
+
     // Fetch the reviewer's profile to get their photo URL
     useEffect(() => {
         // Skip fetching if it's been disabled due to permission errors
@@ -66,14 +66,14 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
             } as UserProfile);
             return;
         }
-        
+
         async function fetchReviewerProfile() {
             setIsLoading(true);
             try {
                 // Try to get the user profile from Firestore
                 const profileRef = doc(getClientDb(), 'userProfiles', review.reviewerId);
                 const profileSnap = await getDoc(profileRef);
-                
+
                 if (profileSnap.exists()) {
                     const profileData = profileSnap.data() as UserProfile;
                     console.log('Profile found:', profileData);
@@ -103,15 +103,15 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
                 }
             } catch (error: any) {
                 console.error('Error fetching reviewer profile:', error);
-                
+
                 // Specifically check for permission errors to avoid repeated attempts
-                if (error.code === 'permission-denied' || 
+                if (error.code === 'permission-denied' ||
                     error.message?.includes('Missing or insufficient permissions')) {
                     console.warn('Permission denied when fetching profiles. Disabling profile fetching.');
                     // Disable further fetching attempts to avoid console spam
                     setProfileFetchingDisabled(true);
                 }
-                
+
                 // Even on error, set a minimal profile to ensure component renders
                 setReviewerProfile({
                     userId: review.reviewerId,
@@ -123,10 +123,10 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
                 setIsLoading(false);
             }
         }
-        
+
         fetchReviewerProfile();
     }, [review.reviewerId, review.reviewerName, profileFetchingDisabled]);
-    
+
     // Get reviewer's initials for avatar fallback
     const getInitials = () => {
         const nameParts = review.reviewerName.split(' ');
@@ -135,7 +135,7 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
         }
         return review.reviewerName.substring(0, 2).toUpperCase();
     };
-    
+
     const handleDeleteReview = () => {
         startTransition(async () => {
             const result = await deleteReviewAction(review.id);
@@ -147,13 +147,13 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
             setShowDeleteDialog(false);
         });
     };
-    
+
     const handleFlagReview = () => {
         if (!flagReason.trim()) {
             toast({ variant: 'destructive', title: 'Error', description: 'Please provide a reason for flagging.' });
             return;
         }
-        
+
         startTransition(async () => {
             const result = await flagReviewForRevisionAction(review.id, flagReason);
             if (result.success) {
@@ -168,275 +168,277 @@ export function ReviewPreviewCard({ review, titleMode = 'reviewer' }: { review: 
 
     return (
         <>
-        <Dialog>
-            <DialogTrigger asChild>
-                <Card className="cursor-pointer hover:shadow-lg transition-shadow duration-200 flex flex-col w-full min-h-[280px]">
-                    <CardHeader className="flex-shrink-0 pb-3 px-4 pt-4">
-                        <div className="flex items-start gap-3">
-                            <Link 
-                                href={`/profile/${review.reviewerId}`}
-                                className="shrink-0" 
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label={`${review.reviewerName}'s profile`}
-                            >
-                                <Avatar className="h-10 w-10 sm:h-11 sm:w-11 border border-border">
-                                    <AvatarImage 
-                                        src={getOptimizedProfilePhoto(reviewerProfile?.photoURL, 'avatar')} 
-                                        alt={review.reviewerName}
-                                        onError={() => console.log('Image failed to load:', reviewerProfile?.photoURL)}
-                                    />
-                                    <AvatarFallback className="text-sm font-semibold">{getInitials()}</AvatarFallback>
-                                </Avatar>
-                            </Link>
-                            <div className="min-w-0 flex-1 space-y-2">
-                                <div className="space-y-1">
-                                    <CardTitle className="text-sm sm:text-base font-semibold leading-tight">
-                                        {titleMode === 'show' ? (
-                                            <span>{toTitleCase(review.showTitle)}</span>
-                                        ) : (
-                                            <Link href={`/profile/${review.reviewerId}`} className="hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
-                                                {review.reviewerName}
-                                            </Link>
-                                        )}
-                                    </CardTitle>
-                                    <CardDescription className="text-xs">
-                                        Reviewed on {formattedDate}
-                                    </CardDescription>
+            <Dialog>
+                <DialogTrigger asChild>
+                    <Card className="cursor-pointer hover:shadow-lg transition-shadow duration-200 flex flex-col w-full min-h-[200px] sm:min-h-[280px] group/card">
+                        <CardHeader className="flex-shrink-0 pb-2 px-3 pt-3 sm:pb-3 sm:px-4 sm:pt-4">
+                            <div className="flex items-start gap-2 sm:gap-3">
+                                <Link
+                                    href={`/profile/${review.reviewerId}`}
+                                    className="shrink-0"
+                                    onClick={(e) => e.stopPropagation()}
+                                    aria-label={`${review.reviewerName}'s profile`}
+                                >
+                                    <Avatar className="h-8 w-8 sm:h-11 sm:w-11 border border-border">
+                                        <AvatarImage
+                                            src={getOptimizedProfilePhoto(reviewerProfile?.photoURL, 'avatar')}
+                                            alt={review.reviewerName}
+                                            onError={() => console.log('Image failed to load:', reviewerProfile?.photoURL)}
+                                        />
+                                        <AvatarFallback className="text-[10px] sm:text-sm font-semibold">{getInitials()}</AvatarFallback>
+                                    </Avatar>
+                                </Link>
+                                <div className="min-w-0 flex-1 space-y-2">
+                                    <div className="space-y-0.5 sm:space-y-1">
+                                        <CardTitle className="text-xs sm:text-base font-semibold leading-tight line-clamp-1">
+                                            {titleMode === 'show' ? (
+                                                <span>{toTitleCase(review.showTitle)}</span>
+                                            ) : (
+                                                <Link href={`/profile/${review.reviewerId}`} className="hover:text-primary transition-colors" onClick={(e) => e.stopPropagation()}>
+                                                    {review.reviewerName}
+                                                </Link>
+                                            )}
+                                        </CardTitle>
+                                        <CardDescription className="text-xs">
+                                            Reviewed on {formattedDate}
+                                        </CardDescription>
+                                    </div>
+                                    <Badge variant="secondary" className="text-[10px] sm:text-xs px-1.5 py-0.5 sm:px-2 sm:py-1 bg-primary/10 text-primary font-medium w-fit">
+                                        {review.overallExperience}
+                                    </Badge>
                                 </div>
-                                <Badge variant="secondary" className="text-xs px-2 py-1 bg-primary/10 text-primary font-medium w-fit">
-                                    {review.overallExperience}
-                                </Badge>
+
+                                {/* Controls (Admin and/or Author) */}
+                                {(isAdmin || isAuthor) && (
+                                    <div className="flex-shrink-0">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 hover:bg-muted"
+                                                    onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                                >
+                                                    <MoreVertical className="h-4 w-4" />
+                                                    <span className="sr-only">Open menu</span>
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                {isAuthor && (
+                                                    <>
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsEditOpen(true);
+                                                            }}
+                                                        >
+                                                            <Pencil className="mr-2 h-4 w-4" />
+                                                            Edit Review
+                                                        </DropdownMenuItem>
+                                                        {isAdmin && <DropdownMenuSeparator />}
+                                                    </>
+                                                )}
+                                                {isAdmin && (
+                                                    <>
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setShowFlagDialog(true);
+                                                            }}
+                                                            disabled={isPending}
+                                                        >
+                                                            <Flag className="mr-2 h-4 w-4" />
+                                                            Flag for Revision
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setShowDeleteDialog(true);
+                                                            }}
+                                                            disabled={isPending}
+                                                            className="text-destructive focus:text-destructive"
+                                                        >
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            Delete Review
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                )}
                             </div>
-                            
-                            {/* Controls (Admin and/or Author) */}
-                            {(isAdmin || isAuthor) && (
-                                <div className="flex-shrink-0">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="sm" 
-                                                className="h-8 w-8 p-0 hover:bg-muted"
-                                                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                            >
-                                                <MoreVertical className="h-4 w-4" />
-                                                <span className="sr-only">Open menu</span>
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                            {isAuthor && (
-                                                <>
-                                                    <DropdownMenuItem
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setIsEditOpen(true);
-                                                        }}
-                                                    >
-                                                        <Pencil className="mr-2 h-4 w-4" />
-                                                        Edit Review
-                                                    </DropdownMenuItem>
-                                                    {isAdmin && <DropdownMenuSeparator />}
-                                                </>
-                                            )}
-                                            {isAdmin && (
-                                                <>
-                                                    <DropdownMenuItem 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setShowFlagDialog(true);
-                                                        }}
-                                                        disabled={isPending}
-                                                    >
-                                                        <Flag className="mr-2 h-4 w-4" />
-                                                        Flag for Revision
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuSeparator />
-                                                    <DropdownMenuItem 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setShowDeleteDialog(true);
-                                                        }}
-                                                        disabled={isPending}
-                                                        className="text-destructive focus:text-destructive"
-                                                    >
-                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                        Delete Review
-                                                    </DropdownMenuItem>
-                                                </>
-                                            )}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
+                        </CardHeader>
+                        <CardContent className="flex-grow px-3 py-2 sm:px-4 sm:py-3">
+                            <p className="text-xs sm:text-sm text-muted-foreground italic leading-relaxed">"{snippet}"</p>
+                        </CardContent>
+                        <CardFooter className="flex justify-between items-center text-[10px] sm:text-xs text-muted-foreground pt-3 px-3 pb-4 sm:pt-4 sm:px-4 sm:pb-5">
+                            <div className="flex items-center gap-2 sm:gap-4">
+                                <span className="flex items-center gap-1">
+                                    <ThumbsUp className="h-2.5 w-2.5 sm:h-4 sm:w-4" /> {review.likes || 0}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                    <ThumbsDown className="h-2.5 w-2.5 sm:h-4 sm:w-4" /> {review.dislikes || 0}
+                                </span>
+                            </div>
+                            <span className="font-semibold text-primary text-[10px] sm:text-sm group-hover/card:translate-x-1 transition-transform">
+                                <span className="hidden xs:inline">Read More</span> &rarr;
+                            </span>
+                        </CardFooter>
+                    </Card>
+                </DialogTrigger>
+                <DialogContent data-hide-close className="sm:max-w-[800px] h-[95vh] max-h-[95vh] overflow-hidden flex flex-col px-1 sm:px-6 pb-0 [&>button[aria-label='Close']]:hidden">
+                    {/* Sticky header with visible close button */}
+                    <div className="sticky top-0 z-10 border-b bg-gradient-to-b from-background/95 to-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+                        <div className="relative">
+                            <DialogClose className="absolute right-3 top-3 sm:right-4 sm:top-4 z-20 rounded-full p-2 hover:bg-muted" aria-label="Close review">
+                                <X className="h-5 w-5" />
+                            </DialogClose>
+                            <DialogHeader className="space-y-2 py-3 sm:py-4 pr-12">
+                                <DialogTitle className="text-xl sm:text-2xl font-headline text-center">
+                                    Review for {toTitleCase(review.showTitle)}
+                                </DialogTitle>
+                                {/* Reviewer row */}
+                                <div className="flex items-center justify-center gap-3">
+                                    <Link href={`/profile/${review.reviewerId}`} className="shrink-0" aria-label={`${review.reviewerName}'s profile`}>
+                                        <Avatar className="h-9 w-9 border border-border">
+                                            <AvatarImage src={getOptimizedProfilePhoto(reviewerProfile?.photoURL, 'avatar')} alt={review.reviewerName} />
+                                            <AvatarFallback className="text-xs font-semibold">{getInitials()}</AvatarFallback>
+                                        </Avatar>
+                                    </Link>
+                                    <div className="min-w-0 text-center">
+                                        <Link href={`/profile/${review.reviewerId}`} className="font-semibold text-sm sm:text-base text-foreground hover:text-primary transition-colors block">
+                                            {review.reviewerName}
+                                        </Link>
+                                        <p className="text-xs text-muted-foreground">Reviewed on {formattedDate}</p>
+                                    </div>
                                 </div>
-                            )}
+                                <div className="flex justify-center">
+                                    <Badge variant="secondary" className="text-xs px-2 py-1 bg-primary/10 text-primary font-medium w-fit">
+                                        {review.overallExperience}
+                                    </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground text-center">Tap the reviewer's name or photo to view their profile</p>
+                            </DialogHeader>
                         </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow px-4 py-3">
-                        <p className="text-sm text-muted-foreground italic leading-relaxed">"{snippet}"</p>
-                    </CardContent>
-                    <CardFooter className="flex justify-between items-center text-xs text-muted-foreground pt-4 px-4 pb-5">
-                        <div className="flex items-center gap-3 sm:gap-4">
-                            <span className="flex items-center gap-1.5">
-                                <ThumbsUp className="h-3 w-3 sm:h-4 sm:w-4"/> {review.likes || 0}
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <ThumbsDown className="h-3 w-3 sm:h-4 sm:w-4"/> {review.dislikes || 0}
-                            </span>
-                        </div>
-                        <span className="font-semibold text-primary text-xs sm:text-sm">Read More &rarr;</span>
-                    </CardFooter>
-                </Card>
-            </DialogTrigger>
-            <DialogContent data-hide-close className="sm:max-w-[800px] h-[95vh] max-h-[95vh] overflow-hidden flex flex-col px-1 sm:px-6 pb-0 [&>button[aria-label='Close']]:hidden">
-                {/* Sticky header with visible close button */}
-                <div className="sticky top-0 z-10 border-b bg-gradient-to-b from-background/95 to-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-                  <div className="relative">
-                    <DialogClose className="absolute right-3 top-3 sm:right-4 sm:top-4 z-20 rounded-full p-2 hover:bg-muted" aria-label="Close review">
-                      <X className="h-5 w-5" />
-                    </DialogClose>
-                    <DialogHeader className="space-y-2 py-3 sm:py-4 pr-12">
-                      <DialogTitle className="text-xl sm:text-2xl font-headline text-center">
-                        Review for {toTitleCase(review.showTitle)}
-                      </DialogTitle>
-                      {/* Reviewer row */}
-                      <div className="flex items-center justify-center gap-3">
-                        <Link href={`/profile/${review.reviewerId}`} className="shrink-0" aria-label={`${review.reviewerName}'s profile`}>
-                          <Avatar className="h-9 w-9 border border-border">
-                            <AvatarImage src={getOptimizedProfilePhoto(reviewerProfile?.photoURL, 'avatar')} alt={review.reviewerName} />
-                            <AvatarFallback className="text-xs font-semibold">{getInitials()}</AvatarFallback>
-                          </Avatar>
-                        </Link>
-                        <div className="min-w-0 text-center">
-                          <Link href={`/profile/${review.reviewerId}`} className="font-semibold text-sm sm:text-base text-foreground hover:text-primary transition-colors block">
-                            {review.reviewerName}
-                          </Link>
-                          <p className="text-xs text-muted-foreground">Reviewed on {formattedDate}</p>
-                        </div>
-                      </div>
-                      <div className="flex justify-center">
-                        <Badge variant="secondary" className="text-xs px-2 py-1 bg-primary/10 text-primary font-medium w-fit">
-                          {review.overallExperience}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground text-center">Tap the reviewer's name or photo to view their profile</p>
-                    </DialogHeader>
-                  </div>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-[calc(env(safe-area-inset-bottom,0px)+56px)] sm:pb-[calc(env(safe-area-inset-bottom,0px)+56px)]">
-                    <div className="py-4 prose prose-sm sm:prose-base max-w-none">
-                        <ReviewCard 
-                            review={review} 
-                            hideHeader 
-                            controlledFontSize={readerFontSize} 
-                            onFontSizeChange={setReaderFontSize}
-                        />
                     </div>
-                </div>
 
-                {/* Modal footer with compact font-size controls, flush with bottom */}
-                <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 sm:px-6 py-2">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant={readerFontSize === 'small' ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => setReaderFontSize('small')}
-                      aria-label="Decrease text size"
-                    >
-                      A-
-                    </Button>
-                    <Button
-                      variant={readerFontSize === 'medium' ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => setReaderFontSize('medium')}
-                      aria-label="Default text size"
-                    >
-                      A
-                    </Button>
-                    <Button
-                      variant={readerFontSize === 'large' ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => setReaderFontSize('large')}
-                      aria-label="Increase text size"
-                    >
-                      A+
-                    </Button>
-                  </div>
-                </div>
-            </DialogContent>
-        </Dialog>
-        
-        {/* Admin Delete Confirmation Dialog */}
-        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Review</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Are you sure you want to delete this review by {review.reviewerName}? This action cannot be undone.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                        onClick={handleDeleteReview}
-                        disabled={isPending}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                        {isPending ? 'Deleting...' : 'Delete Review'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-        
-        {/* Admin Flag for Revision Dialog */}
-        <AlertDialog open={showFlagDialog} onOpenChange={setShowFlagDialog}>
-            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Flag Review for Revision</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Please provide a reason for flagging this review. The reviewer will be notified and asked to revise their review.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4">
-                    <textarea 
-                        value={flagReason}
-                        onChange={(e) => setFlagReason(e.target.value)}
-                        placeholder="Enter reason for flagging (e.g., inappropriate content, needs more detail, etc.)"
-                        className="w-full p-3 border rounded-md resize-none h-24 text-sm"
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                </div>
-                <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                        onClick={handleFlagReview}
-                        disabled={isPending || !flagReason.trim()}
-                    >
-                        {isPending ? 'Flagging...' : 'Flag for Revision'}
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
+                    <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-[calc(env(safe-area-inset-bottom,0px)+56px)] sm:pb-[calc(env(safe-area-inset-bottom,0px)+56px)]">
+                        <div className="py-4 prose prose-sm sm:prose-base max-w-none">
+                            <ReviewCard
+                                review={review}
+                                hideHeader
+                                controlledFontSize={readerFontSize}
+                                onFontSizeChange={setReaderFontSize}
+                            />
+                        </div>
+                    </div>
 
-        {/* Author Edit Review Dialog */}
-        {isAuthor && (
-            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                    <DialogHeader>
-                        <DialogTitle>Edit Your Review</DialogTitle>
-                    </DialogHeader>
-                    <EditReviewForm
-                        review={review}
-                        onSuccess={() => {
-                            setIsEditOpen(false);
-                            router.refresh();
-                        }}
-                    />
+                    {/* Modal footer with compact font-size controls, flush with bottom */}
+                    <div className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 px-4 sm:px-6 py-2">
+                        <div className="flex items-center justify-end gap-2">
+                            <Button
+                                variant={readerFontSize === 'small' ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setReaderFontSize('small')}
+                                aria-label="Decrease text size"
+                            >
+                                A-
+                            </Button>
+                            <Button
+                                variant={readerFontSize === 'medium' ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setReaderFontSize('medium')}
+                                aria-label="Default text size"
+                            >
+                                A
+                            </Button>
+                            <Button
+                                variant={readerFontSize === 'large' ? 'default' : 'outline'}
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setReaderFontSize('large')}
+                                aria-label="Increase text size"
+                            >
+                                A+
+                            </Button>
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
-        )}
+
+            {/* Admin Delete Confirmation Dialog */}
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Review</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete this review by {review.reviewerName}? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDeleteReview}
+                            disabled={isPending}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            {isPending ? 'Deleting...' : 'Delete Review'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Admin Flag for Revision Dialog */}
+            <AlertDialog open={showFlagDialog} onOpenChange={setShowFlagDialog}>
+                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Flag Review for Revision</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Please provide a reason for flagging this review. The reviewer will be notified and asked to revise their review.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="py-4">
+                        <textarea
+                            value={flagReason}
+                            onChange={(e) => setFlagReason(e.target.value)}
+                            placeholder="Enter reason for flagging (e.g., inappropriate content, needs more detail, etc.)"
+                            className="w-full p-3 border rounded-md resize-none h-24 text-sm"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleFlagReview}
+                            disabled={isPending || !flagReason.trim()}
+                        >
+                            {isPending ? 'Flagging...' : 'Flag for Revision'}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Author Edit Review Dialog */}
+            {isAuthor && (
+                <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                        <DialogHeader>
+                            <DialogTitle>Edit Your Review</DialogTitle>
+                        </DialogHeader>
+                        <EditReviewForm
+                            review={review}
+                            onSuccess={() => {
+                                setIsEditOpen(false);
+                                router.refresh();
+                            }}
+                        />
+                    </DialogContent>
+                </Dialog>
+            )}
         </>
     );
 }
