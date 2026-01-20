@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { EventEditorForm } from '@/components/admin/EventEditorForm';
 import type { Event, Venue } from '@/lib/types';
 
+import { useRouter } from 'next/navigation';
+
 interface EventEditorModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -13,6 +15,8 @@ interface EventEditorModalProps {
 }
 
 export function EventEditorModal({ isOpen, onClose, eventToEdit, venues }: EventEditorModalProps) {
+    const router = useRouter();
+
     if (!eventToEdit) return null;
 
     return (
@@ -24,10 +28,11 @@ export function EventEditorModal({ isOpen, onClose, eventToEdit, venues }: Event
                         Update the event details below. Changes will be reflected on the calendar immediately.
                     </DialogDescription>
                 </DialogHeader>
-                <EventEditorForm 
-                    eventToEdit={eventToEdit} 
-                    venues={venues} 
+                <EventEditorForm
+                    eventToEdit={eventToEdit}
+                    venues={venues}
                     onSuccess={() => {
+                        router.refresh();
                         onClose();
                     }}
                 />

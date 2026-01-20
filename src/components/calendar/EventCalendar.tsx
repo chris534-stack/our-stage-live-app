@@ -743,6 +743,7 @@ export function EventCalendar({ events, venues }: { events: ExpandedCalendarEven
             onSuccess={async () => {
               setCreateEventOpen(false);
               await setVenueRepOnboardingCompleted?.();
+              router.refresh();
             }}
           />
         </DialogContent>

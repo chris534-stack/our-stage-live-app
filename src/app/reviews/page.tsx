@@ -67,12 +67,7 @@ export default async function ReviewsPage() {
 
     return (
         <div className="w-full py-8 px-2 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-                <h1 className="text-4xl md:text-5xl font-bold font-headline text-primary mb-3">Community Reviews</h1>
-                <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-                    The conversation about Eugene's theatre scene, straight from the audience.
-                </p>
-            </div>
+
 
             <div className="mb-16">
                 <ReviewsHeroCTA />

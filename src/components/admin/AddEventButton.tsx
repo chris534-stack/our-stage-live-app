@@ -14,9 +14,11 @@ import {
 import { ScraperForm } from '@/components/admin/ScraperForm';
 import { Plus } from 'lucide-react';
 import type { Venue } from '@/lib/types';
+import { useRouter } from 'next/navigation';
 
 export function AddEventButton({ venues }: { venues: Venue[] }) {
   const [isOpen, setIsOpen] = useState(false);
+  const router = useRouter();
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -37,7 +39,10 @@ export function AddEventButton({ venues }: { venues: Venue[] }) {
           </DialogDescription>
         </DialogHeader>
         <div className="pt-4">
-            <ScraperForm venues={venues} onSuccess={() => setIsOpen(false)} />
+          <ScraperForm venues={venues} onSuccess={() => {
+            setIsOpen(false);
+            router.refresh();
+          }} />
         </div>
       </DialogContent>
     </Dialog>

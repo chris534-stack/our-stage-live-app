@@ -29,6 +29,13 @@ export type Event = {
   createdBy: string;
   url?: string;
   posterUrl?: string;
+  // Archive-specific fields (optional, for historical productions)
+  playwright?: string;
+  composer?: string;
+  director?: string;
+  isArchived?: boolean;              // True for historical/past events in the archive
+  originalProductionYear?: number;   // Year of original production
+  researchConfidence?: 'low' | 'medium' | 'high'; // AI research confidence level
 };
 
 export type Idea = {
@@ -47,7 +54,7 @@ export type Idea = {
 };
 
 export type NewsArticle = {
-  id:string;
+  id: string;
   url: string;
   title: string;
   summary: string;
@@ -57,50 +64,50 @@ export type NewsArticle = {
 };
 
 export type Review = {
-    id: string;
-    showId: string;
-    showTitle: string;
-    performanceDate: string; // ISO String format
-    reviewerId: string;
-    reviewerName: string;
-    createdAt: string;
-    updatedAt?: string;
-    overallExperience: string;
-    specialMomentsText: string;
-    recommendations: string[];
-    showHeartText: string;
-    communityImpactText: string;
-    ticketInfo: string;
-    valueConsiderationText: string;
-    timeWellSpentText: string;
-    likes: number;
-    dislikes: number;
-    votedBy: string[];
-    disclosureText: string;
-    // Revision flags for admin moderation
-    flaggedForRevision?: boolean;
-    flaggedReason?: string;
-    flaggedAt?: string;
-    flaggedBy?: string;
+  id: string;
+  showId: string;
+  showTitle: string;
+  performanceDate: string; // ISO String format
+  reviewerId: string;
+  reviewerName: string;
+  createdAt: string;
+  updatedAt?: string;
+  overallExperience: string;
+  specialMomentsText: string;
+  recommendations: string[];
+  showHeartText: string;
+  communityImpactText: string;
+  ticketInfo: string;
+  valueConsiderationText: string;
+  timeWellSpentText: string;
+  likes: number;
+  dislikes: number;
+  votedBy: string[];
+  disclosureText: string;
+  // Revision flags for admin moderation
+  flaggedForRevision?: boolean;
+  flaggedReason?: string;
+  flaggedAt?: string;
+  flaggedBy?: string;
 };
 
 // An "Expanded Event" is a single performance instance, derived from a parent Event
 export type ExpandedCalendarEvent = Omit<Event, 'occurrences'> & {
-    uniqueOccurrenceId: string; // A unique ID for this specific performance
-    date: string;
-    time: string;
-    venue?: Venue;
-    reviews: Review[];
+  uniqueOccurrenceId: string; // A unique ID for this specific performance
+  date: string;
+  time: string;
+  venue?: Venue;
+  reviews: Review[];
 };
 
 export type ReviewerRequest = {
-    id: string;
-    userId: string;
-    userName: string;
-    userEmail: string;
-    status: 'pending' | 'approved' | 'denied';
-    createdAt: string;
-    archived?: boolean;              // Whether this request has been archived
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  status: 'pending' | 'approved' | 'denied';
+  createdAt: string;
+  archived?: boolean;              // Whether this request has been archived
 };
 
 export type UserProfile = {
@@ -154,7 +161,7 @@ export type VenueRepresentativeInvitation = {
   usedAt?: string;                 // When invitation was used (if accepted)
   acceptedByUserId?: string;       // Firebase user ID who accepted
   archived?: boolean;              // Whether this invitation has been archived
-  
+
   // Unbound invite extras (for short code challenge)
   // When creating an unbound invite, set email to an empty string and isUnbound to true.
   isUnbound?: boolean;             // If true, this invite is not tied to a specific email
@@ -175,7 +182,7 @@ export type CommunitySpotlight = {
   createdAt: string;               // When spotlight was created
   createdBy: string;               // Admin who created it
   isActive: boolean;               // Only one can be active at a time
-  
+
   // Optional fields:
   links?: {                        // Optional external links
     website?: string;

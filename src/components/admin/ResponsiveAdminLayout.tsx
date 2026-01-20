@@ -4,26 +4,28 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { 
-  FileText, 
-  MapPin, 
-  Globe, 
-  Users, 
-  UserCheck, 
+import {
+  FileText,
+  MapPin,
+  Globe,
+  Users,
+  UserCheck,
   Star,
   BarChart3,
   Menu,
   X,
   Bug,
-  UserCog
+  UserCog,
+  Library
 } from 'lucide-react';
 import { NotificationBell } from '@/components/admin/NotificationBell';
 
-export type AdminSection = 
-  | 'events' 
-  | 'venues' 
-  | 'scraper' 
-  | 'users' 
+export type AdminSection =
+  | 'events'
+  | 'venues'
+  | 'scraper'
+  | 'archive'
+  | 'users'
   | 'reviewers'
   | 'spotlights'
   | 'analytics'
@@ -41,6 +43,7 @@ const navItems: AdminNavItem[] = [
   { id: 'events', label: 'Event Reviews', icon: FileText, mobileLabel: 'Events' },
   { id: 'venues', label: 'Venues', icon: MapPin, mobileLabel: 'Venues' },
   { id: 'scraper', label: 'Web Scraper', icon: Globe, mobileLabel: 'Scraper' },
+  { id: 'archive', label: 'Archive Research', icon: Library, mobileLabel: 'Archive' },
   { id: 'users', label: 'Users Directory', icon: Users, mobileLabel: 'Users' },
   { id: 'reviewers', label: 'Reviewer Hub', icon: UserCheck, mobileLabel: 'Reviewers' },
   { id: 'spotlights', label: 'Community Spotlights', icon: Star, mobileLabel: 'Spotlights' },
@@ -55,10 +58,10 @@ interface ResponsiveAdminLayoutProps {
   onSectionChange: (section: AdminSection) => void;
 }
 
-export function ResponsiveAdminLayout({ 
-  children, 
-  activeSection, 
-  onSectionChange 
+export function ResponsiveAdminLayout({
+  children,
+  activeSection,
+  onSectionChange
 }: ResponsiveAdminLayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 

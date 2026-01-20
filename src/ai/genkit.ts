@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 // Allow selecting the model via env for easy provider/model swaps.
 // Example: AI_MODEL=googleai/gemini-1.5-pro or AI_MODEL=openai/gpt-4o-mini
-const DEFAULT_MODEL = 'openai/gpt-5-mini';
+const DEFAULT_MODEL = 'googleai/gemini-3-flash-preview';
 const ENV_MODEL = process.env.AI_MODEL || DEFAULT_MODEL;
 
 export function getAi(modelOverride?: string) {

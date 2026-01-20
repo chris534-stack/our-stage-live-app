@@ -4,6 +4,7 @@ import { ResponsiveAdminLayout, type AdminSection } from '@/components/admin/Res
 import { ResponsiveEventManager } from '@/components/admin/ResponsiveEventManager';
 import { VenueManager } from '@/components/admin/VenueManager';
 import { ScraperForm } from '@/components/admin/ScraperForm';
+import { ArchiveResearchTool } from '@/components/admin/ArchiveResearchTool';
 import { UsersDirectory } from '@/components/admin/UsersDirectory';
 import { ReviewerHub } from '@/components/admin/ReviewerHub';
 import { CommunitySpotlights } from '@/components/admin/CommunitySpotlights';
@@ -26,7 +27,7 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
   // Keep active section in sync with ?section=
   useEffect(() => {
     const section = searchParams.get('section') as AdminSection | null;
-    const valid: AdminSection[] = ['events','venues','scraper','users','reviewers','spotlights','analytics','venueReps','debug'];
+    const valid: AdminSection[] = ['events', 'venues', 'scraper', 'archive', 'users', 'reviewers', 'spotlights', 'analytics', 'venueReps', 'debug'];
     if (section && valid.includes(section) && section !== activeSection) {
       setActiveSection(section);
     }
@@ -38,7 +39,7 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
     switch (activeSection) {
       case 'events':
         return <ResponsiveEventManager events={initialEvents} venues={venues} />;
-      
+
       case 'venues':
         return (
           <div className="space-y-6">
@@ -49,7 +50,7 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
             <VenueManager venues={venues} />
           </div>
         );
-      
+
       case 'scraper':
         return (
           <div className="space-y-6">
@@ -70,13 +71,16 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
             </Card>
           </div>
         );
-      
+
+      case 'archive':
+        return <ArchiveResearchTool venues={venues} />;
+
       case 'users':
         return <UsersDirectory />;
-      
+
       case 'reviewers':
         return <ReviewerHub />;
-      
+
       case 'venueReps':
         return (
           <div className="space-y-6">
@@ -84,13 +88,13 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
             <VenueRepInvitations venues={venues} autoOpenInvite={autoOpenInvite} hideInviteButton />
           </div>
         );
-      
+
       case 'spotlights':
         return <CommunitySpotlights />;
-      
+
       case 'analytics':
         return <Analytics />;
-      
+
       case 'debug':
         return (
           <div className="space-y-6">
@@ -101,7 +105,7 @@ export default function AdminDashboard({ initialEvents, venues }: { initialEvent
             <SimplifiedDebugDashboard />
           </div>
         );
-      
+
       default:
         return <ResponsiveEventManager events={initialEvents} venues={venues} />;
     }
