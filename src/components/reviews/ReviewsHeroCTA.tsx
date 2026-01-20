@@ -12,10 +12,11 @@ export function ReviewsHeroCTA() {
     return (
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary/90 via-primary to-primary/80 p-8 md:p-12 text-primary-foreground">
             {/* Decorative floating elements */}
-            <div className="absolute top-4 right-8 opacity-20 animate-pulse">
+            <div className="absolute top-4 right-8 opacity-20 animate-subtle-breathe">
                 <MessageSquarePlus className="h-16 w-16 md:h-24 md:w-24" />
             </div>
-            <div className="absolute bottom-4 left-8 opacity-15 animate-pulse delay-500">
+            {/* Moved from bottom-left to top-left */}
+            <div className="absolute top-8 left-8 opacity-15 animate-subtle-breathe delay-500">
                 <Sparkles className="h-12 w-12 md:h-16 md:w-16" />
             </div>
             <div className="absolute -top-6 -left-6 w-32 h-32 bg-accent/20 rounded-full blur-3xl" />

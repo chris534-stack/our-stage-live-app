@@ -82,11 +82,11 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     const [showUploadModal, setShowUploadModal] = useState(false);
     const { toast } = useToast();
     const router = useRouter();
-    
+
     const [isReordering, setIsReordering] = useState(false);
     const [orderedGalleryUrls, setOrderedGalleryUrls] = useState<string[]>([]);
     const [selectedPhotoToMove, setSelectedPhotoToMove] = useState<string | null>(null);
-    
+
     const [isDeleting, setIsDeleting] = useState(false);
     const [isAlertOpen, setIsAlertOpen] = useState(false);
     const [photoToDelete, setPhotoToDelete] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
     useEffect(() => {
         function calculateYearsInCommunity(startDate?: string): string | null {
             if (!startDate?.trim() || !/^\d{4}$/.test(startDate.trim())) return null;
-            
+
             const currentYear = new Date().getFullYear();
             const startYear = parseInt(startDate.trim(), 10);
 
@@ -115,7 +115,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
             if (years === 1) return "About 1 year";
             return `About ${years} years`;
         }
-        
+
         setYearsInCommunity(calculateYearsInCommunity(profile.communityStartDate));
     }, [profile.communityStartDate]);
 
@@ -132,14 +132,14 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         Other: Users,
     };
     const RoleIcon = profile.roleInCommunity ? roleIcons[profile.roleInCommunity] : Users;
-    
+
     const onProfileUpdate = () => {
         // This function is intentionally left empty.
         // Server actions use `revalidatePath`, and the Next.js router
         // will automatically handle refreshing the page with the new data.
         // This avoids client-side state mismatches.
     };
-    
+
     const handlePhotoUploadComplete = () => {
         // Trigger a router refresh to reload the server-rendered data with updated photos
         // This ensures the gallery shows the newly uploaded photos immediately
@@ -149,7 +149,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
             console.warn('Failed to refresh router, manual refresh may be needed:', error);
         }
     };
-    
+
     const handleHeaderUpload = () => {
         setShowUploadModal(true);
     };
@@ -172,7 +172,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         setSelectedImageIndex(index);
         setIsGalleryViewerOpen(true);
     };
-    
+
     const currentPhotoCount = orderedGalleryUrls.length;
     const canUpload = currentPhotoCount < GALLERY_PHOTO_LIMIT;
 
@@ -196,7 +196,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         setOrderedGalleryUrls(profile.galleryImageUrls || []);
         setSelectedPhotoToMove(null);
     };
-    
+
     const handleReorderClick = (targetUrl: string, targetIndex: number) => {
         if (!isReordering) return;
 
@@ -212,7 +212,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
             const newOrder = [...orderedGalleryUrls];
             const [itemToMove] = newOrder.splice(sourceIndex, 1);
             newOrder.splice(targetIndex, 0, itemToMove);
-            
+
             setOrderedGalleryUrls(newOrder);
             setSelectedPhotoToMove(null);
         }
@@ -222,7 +222,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
         if (isReordering) setIsReordering(false);
         setIsDeleting(!isDeleting);
     }
-    
+
     const handleDeleteClick = (url: string) => {
         // Provide immediate feedback that the click was received
         toast({ title: 'Delete photo', description: 'Preparing delete confirmation…' });
@@ -232,7 +232,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
 
     const handleDeleteConfirm = () => {
         if (!photoToDelete) return;
-        
+
         startDeleteTransition(async () => {
             try {
                 // Get Firebase ID token for authentication
@@ -266,7 +266,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                         photoURL: prev.photoURL === photoToDelete ? prev.photoURL : prev.photoURL,
                     }));
                     // Refresh route to re-fetch any server-rendered data and revalidated caches
-                    try { router.refresh(); } catch {}
+                    try { router.refresh(); } catch { }
                 } else {
                     toast({ variant: 'destructive', title: "Deletion Failed", description: result.message });
                 }
@@ -300,119 +300,120 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                     <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="text-lg font-semibold">Upload Photos</h3>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => setShowUploadModal(false)}
                                 className="h-8 w-8 p-0"
                             >
                                 ×
                             </Button>
                         </div>
-                        <MultiPhotoUploader 
-                            userId={profile.userId} 
+                        <MultiPhotoUploader
+                            userId={profile.userId}
                             onUploadComplete={() => {
                                 handlePhotoUploadComplete();
                                 setShowUploadModal(false);
-                            }} 
-                            limit={GALLERY_PHOTO_LIMIT} 
-                            currentCount={currentPhotoCount} 
+                            }}
+                            limit={GALLERY_PHOTO_LIMIT}
+                            currentCount={currentPhotoCount}
                         />
                     </div>
                 </div>
             )}
-            <div className="w-full pb-16">
-                {shouldShowBannerShell && (
-                    <div
-                        className={cn(
-                            "relative w-full overflow-hidden",
-                            hasCoverPhoto ? "h-48 md:h-64" : "h-40 md:h-52 bg-muted/20 border-2 border-dashed border-primary/40"
-                        )}
-                    >
-                        {hasCoverPhoto ? (
-                            <Image
-                                src={profile.coverPhotoUrl!}
-                                alt="Cover photo"
-                                fill
-                                sizes="100vw"
-                                className="object-cover"
-                                data-ai-hint="theatre background"
-                                unoptimized
-                            />
-                        ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center px-4 text-muted-foreground">
-                                <Upload className="h-10 w-10 text-primary" />
-                                <div className="space-y-1">
-                                    <p className="font-medium text-foreground">Add a banner image</p>
-                                    <p className="text-sm text-muted-foreground/80">
-                                        Upload a wide photo to give your profile some personality.
-                                    </p>
-                                </div>
-                                <Button
-                                    variant="secondary"
-                                    onClick={handleHeaderUpload}
-                                    disabled={isUploadPending || !canUpload}
-                                >
-                                    {isUploadPending ? (
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <Upload className="mr-2 h-4 w-4" />
-                                    )}
-                                    Upload banner
-                                </Button>
-                                {!canUpload && (
-                                    <p className="text-xs text-muted-foreground/70">
-                                        Your gallery is full. Remove a photo to upload a banner.
-                                    </p>
-                                )}
+            {/* Banner Hero Bleed System */}
+            <div className="absolute top-0 left-0 right-0 h-[40vh] min-h-[300px] md:h-[60vh] md:min-h-[500px] overflow-hidden -z-10 pointer-events-none">
+                {hasCoverPhoto ? (
+                    <div className="w-full h-full relative">
+                        <Image
+                            src={profile.coverPhotoUrl!}
+                            alt="Profile Background"
+                            fill
+                            className="object-cover opacity-100 mask-gradient-to-b"
+                            unoptimized
+                            priority
+                        />
+                        {/* Gradient Overlay for Text Readability & smooth fade */}
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-background" />
+                        <div className="absolute bottom-0 left-0 right-0 h-1/4 bg-gradient-to-t from-background to-transparent" />
+                    </div>
+                ) : (
+                    <div className="w-full h-full bg-gradient-to-b from-primary/30 via-primary/10 to-background" />
+                )}
+            </div>
+
+            <div className="w-full pb-16 relative z-10 pt-32"> {/* Added pt-32 to push content down below header */}
+                {!hasCoverPhoto && shouldShowBannerShell && (
+                    <div className="container mx-auto px-4 mt-8">
+                        <div className="w-full h-40 md:h-52 bg-muted/20 border-2 border-dashed border-primary/40 rounded-lg flex flex-col items-center justify-center gap-3 text-center text-muted-foreground">
+                            <Upload className="h-10 w-10 text-primary" />
+                            <div className="space-y-1">
+                                <p className="font-medium text-foreground">Add a banner image</p>
+                                <p className="text-sm text-muted-foreground/80">
+                                    Upload a wide photo to give your profile some personality.
+                                </p>
                             </div>
-                        )}
+                            <Button
+                                variant="secondary"
+                                onClick={handleHeaderUpload}
+                                disabled={isUploadPending || !canUpload}
+                            >
+                                {isUploadPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Upload className="mr-2 h-4 w-4" />
+                                )}
+                                Upload banner
+                            </Button>
+                        </div>
                     </div>
                 )}
 
                 <div
                     className={cn(
                         "container mx-auto px-4 sm:px-6 lg:px-8",
-                        shouldShowBannerShell ? "-mt-20" : "mt-6"
+                        shouldShowBannerShell ? "mt-[20vh] md:mt-[35vh]" : "mt-6" // Push down to bottom area of banner
                     )}
                 >
-                    <div className="flex flex-col md:flex-row md:items-end md:gap-8">
-                        <div className="flex-shrink-0">
-                            <Avatar className="h-36 w-36 border-4 border-background ring-2 ring-primary">
-                                <AvatarImage src={getOptimizedProfilePhoto(profile.photoURL, 'profile')} alt={profile.displayName} className="object-cover" />
-                                <AvatarFallback>{profile.displayName.charAt(0)}</AvatarFallback>
-                            </Avatar>
-                        </div>
-                        
-                        <div className="mt-6 md:mt-0 flex-grow flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-                            <div>
-                                <h1 className="text-3xl font-bold font-headline">{profile.displayName}</h1>
-                                {profile.showEmail && (
-                                    <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                                        <Mail className="h-4 w-4" />
-                                        {profile.email}
-                                    </p>
-                                )}
+                    <div className="bg-background/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-xl">
+                        <div className="flex flex-col md:flex-row md:items-end md:gap-8">
+                            <div className="flex-shrink-0 -mt-20 md:-mt-24 mb-4 md:mb-0">
+                                <Avatar className="h-36 w-36 border-4 border-background ring-2 ring-primary bg-background shadow-lg">
+                                    <AvatarImage src={getOptimizedProfilePhoto(profile.photoURL, 'profile')} alt={profile.displayName} className="object-cover" />
+                                    <AvatarFallback>{profile.displayName.charAt(0)}</AvatarFallback>
+                                </Avatar>
                             </div>
-                            <div className="flex gap-2">
-                                {isOwner && (
-                                    <Button onClick={() => setIsSheetOpen(true)}>
-                                        <Edit className="mr-2 h-4 w-4" /> Edit Profile
-                                    </Button>
-                                )}{isOwner && (
-                                    <Button variant="outline" onClick={handleSignOut} disabled={isSignOutPending}>
-                                        {isSignOutPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
-                                        {isSignOutPending ? 'Signing out...' : 'Sign Out'}
-                                    </Button>
-                                )}
-                                {isOwner && isAdmin && (
-                                    <Button asChild variant="outline">
-                                        <Link href="/admin">
-                                            <Shield className="mr-2 h-4 w-4" />
-                                            <span className="hidden sm:inline">Admin Dashboard</span>
-                                        </Link>
-                                    </Button>
-                                )}
+
+                            <div className="flex-grow flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                                <div>
+                                    <h1 className="text-3xl font-bold font-headline text-foreground">{profile.displayName}</h1>
+                                    {profile.showEmail && (
+                                        <p className="text-muted-foreground font-medium flex items-center gap-2 mt-1">
+                                            <Mail className="h-4 w-4" />
+                                            {profile.email}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    {isOwner && (
+                                        <Button onClick={() => setIsSheetOpen(true)}>
+                                            <Edit className="mr-2 h-4 w-4" /> Edit Profile
+                                        </Button>
+                                    )}{isOwner && (
+                                        <Button variant="outline" onClick={handleSignOut} disabled={isSignOutPending}>
+                                            {isSignOutPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                                            {isSignOutPending ? 'Signing out...' : 'Sign Out'}
+                                        </Button>
+                                    )}
+                                    {isOwner && isAdmin && (
+                                        <Button asChild variant="outline">
+                                            <Link href="/admin">
+                                                <Shield className="mr-2 h-4 w-4" />
+                                                <span className="hidden sm:inline">Admin Dashboard</span>
+                                            </Link>
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -543,7 +544,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                                     )}
                                 </CardContent>
                             </Card>
-                             <section>
+                            <section>
                                 <h2 className="text-2xl font-bold font-headline mb-4">Recent Reviews</h2>
                                 {initialReviews.length > 0 ? (
                                     <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-1 md:grid-cols-2 sm:gap-6">
@@ -559,7 +560,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                     </div>
                 </div>
             </div>
-            
+
             <GalleryViewer
                 isOpen={isGalleryViewerOpen}
                 onClose={() => setIsGalleryViewerOpen(false)}
@@ -569,7 +570,7 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
                 userId={profile.userId}
                 isOwner={isOwner}
             />
-            
+
             <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -588,8 +589,8 @@ export default function ProfileClientPage({ initialProfile, initialReviews }: { 
             </AlertDialog>
 
             {isOwner && (
-                <EditProfileSheet 
-                    isOpen={isSheetOpen} 
+                <EditProfileSheet
+                    isOpen={isSheetOpen}
                     onClose={() => setIsSheetOpen(false)}
                     profile={profile}
                     onProfileUpdate={onProfileUpdate}

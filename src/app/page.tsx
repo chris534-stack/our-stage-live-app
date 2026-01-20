@@ -4,7 +4,7 @@ import { getFeaturedEventsFirestore, getAllVenues, enrichEventsWithVenues } from
 import type { Event, Venue } from '@/lib/types';
 import { ExpandableEventTile } from '@/components/home/ExpandableEventTile';
 import { CommunitySpotlightSection } from '@/components/home/CommunitySpotlightSection';
-import { HeroMembersButton } from '@/components/home/HeroMembersButton';
+import { HomeHero } from '@/components/home/HomeHero';
 
 type EventWithVenue = Event & { venue?: Venue };
 
@@ -34,20 +34,9 @@ export default async function Home() {
         {/* Left column */}
         <div className="flex flex-col">
           <section className="w-full py-8 md:py-12">
-            {/* Keep hero centered but within left column; remove extra container wrapper */}
-            <div className="mx-auto max-w-4xl rounded-2xl bg-primary p-8 md:p-12 text-center text-primary-foreground shadow-2xl">
-              <div className="inline-block">
-                <h1 className="text-4xl md:text-6xl font-bold font-headline mb-4 leading-tight">
-                  Our Stage,<br />Eugene
-                </h1>
-                <div className="h-1.5 bg-accent w-1/2 mx-auto"></div>
-              </div>
-              <p className="text-md md:text-xl text-accent max-w-2xl mx-auto my-6">
-                Your one-stop resource for performances, auditions, workshops, and community connections in Eugene, Oregon.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-                <HeroMembersButton />
-              </div>
+            {/* Modern hero with gradient and decorative elements */}
+            <div className="mx-auto max-w-4xl">
+              <HomeHero />
             </div>
           </section>
 

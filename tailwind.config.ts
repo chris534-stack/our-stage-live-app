@@ -1,4 +1,4 @@
-import type {Config} from 'tailwindcss';
+import type { Config } from 'tailwindcss';
 
 export default {
   darkMode: ['class'],
@@ -84,24 +84,24 @@ export default {
       },
       keyframes: {
         'accordion-down': {
-          from: {
-            height: '0',
-          },
-          to: {
-            height: 'var(--radix-accordion-content-height)',
-          },
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
         },
         'accordion-up': {
-          from: {
-            height: 'var(--radix-accordion-content-height)',
-          },
-          to: {
-            height: '0',
-          },
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
         },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
         'fade-in-down': { from: { opacity: '0', transform: 'translateY(-10px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
         'fade-in-up': { from: { opacity: '0', transform: 'translateY(10px)' }, to: { opacity: '1', transform: 'translateY(0)' } },
+        'subtle-breathe': {
+          '0%, 100%': { opacity: '0.2', transform: 'scale(1)' },
+          '50%': { opacity: '0.3', transform: 'scale(1.05)' },
+        },
+        'spotlight': {
+          '0%, 100%': { opacity: '0.6', transform: 'scale(1) translate(0, 0)' },
+          '50%': { opacity: '0.8', transform: 'scale(1.1) translate(2%, 2%)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -109,6 +109,8 @@ export default {
         'fade-in': 'fade-in 0.5s ease-out forwards',
         'fade-in-down': 'fade-in-down 0.5s ease-out forwards',
         'fade-in-up': 'fade-in-up 0.5s ease-out forwards',
+        'subtle-breathe': 'subtle-breathe 4s ease-in-out infinite',
+        'spotlight': 'spotlight 8s ease-in-out infinite',
       },
     },
   },
